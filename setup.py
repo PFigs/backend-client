@@ -23,6 +23,27 @@ with open(readme_file) as f:
     long_description = f.read()
 
 
+def custom_scheme():
+    def custom_version(version):
+        tag = str(version.tag)
+        if version.exact:
+            return tag
+
+        # split on rc and compute a pre-release tag for the next patch
+        tag_components = tag.rsplit("rc")
+        major, minor, patch = tag_components[0].split(".")
+        patch = int(patch) + 1
+        distance = version.distance
+        tag = f"{major}.{minor}.{patch}.dev{distance}"
+
+        return tag
+
+    return {
+        "version_scheme": custom_version,
+        "local_scheme": "no-local-version",
+    }
+
+
 def get_absolute_path(*args):
     """ Transform relative pathnames into absolute pathnames """
     return os.path.join(here, *args)
@@ -47,7 +68,8 @@ with open(get_absolute_path("./wirepas_backend_client/__about__.py")) as f:
 
 setup(
     name=about["__pkg_name__"],
-    version=about["__version__"],
+    use_scm_version=custom_scheme,
+    setup_requires=["setuptools_scm"],
     description=about["__description__"],
     long_description=long_description,
     long_description_content_type="text/markdown",
