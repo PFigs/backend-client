@@ -1,3 +1,5 @@
+version.py
+.eggs/
 *.hub
 Pipfile
 *.private*
