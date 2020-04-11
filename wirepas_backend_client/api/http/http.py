@@ -38,6 +38,7 @@ import time
 import urllib
 
 from wirepas_backend_client.api.mqtt import Topics
+from wirepas_backend_client.api.mqtt import MQTT_QOS_options
 from wirepas_backend_client.api.stream import StreamObserver
 from wirepas_backend_client.tools import Settings
 
@@ -75,6 +76,7 @@ class SinkAndGatewayStatusObserver(Thread):
                 # Http server does not subscribe MQTT configuration. It is
                 # done by caller of http. Caller subscribes certain network
                 # all gateways.
+
                 status_msg = self.gw_status_queue.get(block=True, timeout=60)
                 self.logger.info("HTTP status_msg={}".format(status_msg))
                 # New status of gateway received.

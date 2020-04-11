@@ -17,12 +17,14 @@ from .decorators import decode_topic_message, topic_message
 from .handlers import MQTTObserver
 from .settings import MQTTSettings
 from .topics import Topics
+from .mqtt_options import MQTT_QOS_options
 
 __all__ = [
+    "MQTT",
+    "MQTTObserver",
+    "MQTTSettings",
+    "MQTT_QOS_options",
+    "Topics",
     "decode_topic_message",
     "topic_message",
-    "MQTTObserver",
-    "MQTT",
-    "MQTTSettings",
-    "Topics",
 ]

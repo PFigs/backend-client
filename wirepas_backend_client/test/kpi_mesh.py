@@ -137,6 +137,17 @@ class MultiMessageMqttObserver(MQTTObserver):
 
         return on_status_received
 
+    @staticmethod
+    def isValidNetworkId(network_id):
+        ret: bool = False
+        try:
+            int(network_id)
+            ret = True
+        except ValueError:
+            ret = False
+
+        return ret
+
     def generate_got_gw_configs_cb(self, network_id) -> callable:
         """ Returns a callback to process gw responses to get_
         configs message """
@@ -153,13 +164,26 @@ class MultiMessageMqttObserver(MQTTObserver):
                 configuration_processed = False
 
                 for config in message.configs:
-                    if network_id != "+":
-                        if int(config["network_address"]) == int(network_id):
-                            self.gw_status_queue.put(message.__dict__)
-                            configuration_processed = True
-                            # We assume that each sink of gateway operates
-                            # on same network.
-                            break
+
+                    if self.isValidNetworkId(network_id):
+                        if "network_address" in config:
+                            try:
+                                if int(config["network_address"]) == int(
+                                    network_id
+                                ):
+                                    self.gw_status_queue.put(message.__dict__)
+                                    configuration_processed = True
+                                    # We assume that each sink of gateway
+                                    # operates on same network.
+                                    break
+                            except ValueError:
+                                pass
+                                # Conversion to integer type failed.
+                                # We should not enter here as we check network
+                                # id validity above
+                        else:
+                            # Network address not found from config.
+                            pass
                     else:
                         configuration_processed = True
                         self.gw_status_queue.put(message.__dict__)
