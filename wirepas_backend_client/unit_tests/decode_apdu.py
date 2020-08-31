@@ -10,7 +10,7 @@ LoggerHelper(module_name="message_decoding").setup()
 
 def decode_apdu():
 
-    with open("./tests/files/apdu_decode.json") as mqtt_traffic:
+    with open("./unit_tests/files/apdu_decode.json") as mqtt_traffic:
         messages = mqtt_traffic.readlines()
 
     for message in messages:

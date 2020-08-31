@@ -185,6 +185,7 @@ class Topics(object):
 
     def event_message(self, name, **kwargs):
         """ constructs an event message for the topic identified by name """
+
         message = None
         if kwargs:
             topic_info = self._topics[self.api_version]["event"][name]

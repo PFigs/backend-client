@@ -18,9 +18,11 @@ import subprocess
 import sys
 import time
 import queue
-
-from .gateway import GatewayCliCommands
-from ..api import Topics
+from threading import Lock
+import threading
+from threading import Timer
+from wirepas_backend_client.api.mqtt import Topics
+from wirepas_backend_client.cli.gateway import GatewayCliCommands
 
 
 class GatewayShell(GatewayCliCommands):
@@ -61,6 +63,7 @@ class GatewayShell(GatewayCliCommands):
         self._minimal_prints = False
         self._silent_loop = False
         self._max_queue_size = 1000
+        self._max_data_queue_size = 1  # Data queues contains list messges
 
         self._file = None
         self._histfile = os.path.expanduser("~/.wm-shell-history")
@@ -84,6 +87,7 @@ class GatewayShell(GatewayCliCommands):
         self.data_queue = data_queue
         self.event_queue = event_queue
 
+        self.wait_api_lock = Lock()
         self.mqtt_topics = Topics()
         self.exit_signal = exit_signal
         self.timeout = timeout
@@ -91,6 +95,21 @@ class GatewayShell(GatewayCliCommands):
 
         self.device_manager = shared_state["devices"]
         self._shared_state = shared_state
+        self._flush_lock = threading.Lock()
+
+        self.start_data_event_queue_peroidic_flush_timer()
+
+    def start_data_event_queue_peroidic_flush_timer(self):
+        self.data_event_flush_timer_interval_sec: float = 1.0
+        self._perioidicTimer = Timer(
+            self.data_event_flush_timer_interval_sec,
+            self.__data_event_perioid_flush_timeout,
+        ).start()
+
+    def __data_event_perioid_flush_timeout(self):
+        with self._flush_lock:
+            self._trim_queues()
+            self.start_data_event_queue_peroidic_flush_timer()
 
     @staticmethod
     def time_format():
@@ -214,15 +233,16 @@ class GatewayShell(GatewayCliCommands):
 
     def consume_data_queue(self):
         """ Exhausts the data queue """
-        for message in self.consume_queue(self.data_queue):
-            self.on_data_queue_message(message)
-            yield message
+        while self.get_messages_from_data_queue() is not None:
+            pass
 
-    def get_message_from_data_queue(self):
-        message = None
-        if self.data_queue.empty() is not True:
-            message = self.data_queue.get()
-        return message
+    def get_messages_from_data_queue(self) -> list:
+        msgs = None
+        # Data message rate is huge compared to others. Queue contains message
+        # lists that are then processed
+        if self.data_queue.empty() is False:
+            msgs = self.data_queue.get()  # returns message list
+        return msgs
 
     def consume_event_queue(self):
         """ Exhausts the event queue """
@@ -238,14 +258,17 @@ class GatewayShell(GatewayCliCommands):
 
     def _trim_queues(self):
         """ Trim queues ensures that queue size does not run too long"""
-        if self.data_queue.qsize() > self._max_queue_size:
-            self.consume_data_queue()
+        try:
+            if self.data_queue.qsize() > self._max_data_queue_size:
+                self.consume_data_queue()
 
-        if self.event_queue.qsize() > self._max_queue_size:
-            self.consume_event_queue()
+            if self.event_queue.qsize() > self._max_queue_size:
+                self.consume_event_queue()
 
-        if self.response_queue.qsize() > self._max_queue_size:
-            self.consume_response_queue()
+            if self.response_queue.qsize() > self._max_queue_size:
+                self.consume_response_queue()
+        except FileNotFoundError:
+            sys.exit("Exiting")
 
     def _update_prompt(self):
         """ Method called to update the prompt command line.
@@ -287,7 +310,13 @@ class GatewayShell(GatewayCliCommands):
         super().on_print(reply, reply_greeting=None, pretty=None)
 
     def wait_for_answer(self, device, request_message, timeout=30, block=True):
-        """ Exhaust a given queue until it is empty """
+        """ Wait response to request_message. If response received, return it.
+            If timeout, return None
+
+            !Note this function will discard messages it gets from queue.
+            """
+
+        self.wait_api_lock.acquire()
 
         wait_start_time = time.perf_counter()
 
@@ -298,44 +327,46 @@ class GatewayShell(GatewayCliCommands):
 
         message = None
         if timeout:
-            try:
-                response_good: bool
-                response_good = False
+            response_good: bool = False
 
-                while not response_good:
+            while response_good is False:
+                try:
+                    queue_poll_time_sec: float = 0.1
                     message = self.response_queue.get(
-                        block=block, timeout=self.timeout
+                        block=block, timeout=queue_poll_time_sec
                     )
                     if str(message.gw_id) == str(device):
                         if int(message.req_id) == int(
                             request_message["data"].req_id
                         ):
                             response_good = True
+                        else:
+                            pass
+
                     else:
-                        # put message back to queue back
-                        if self.request_queue.empty():
-                            # wait a bit to avoid busy loop
-                            defaultSleepTime = 0.1
-                            time.sleep(defaultSleepTime)
+                        pass
 
-                        self.response_queue.put(message)
+                    if self.request_queue.empty():
+                        # wait a bit to avoid busy loop when putting
+                        # same message back and reading it again.
+                        default_sleep_time: float = 0.1
+                        time.sleep(default_sleep_time)
 
-                    if time.perf_counter() - wait_start_time > timeout:
-                        print(
-                            "Error got no reply for {} in time. "
-                            "Time waited {:.0f} secs.".format(
-                                device, time.perf_counter() - wait_start_time
-                            )
+                except queue.Empty:
+                    # keep polling
+                    pass
+
+                if time.perf_counter() - wait_start_time > timeout:
+                    print(
+                        "Error got no reply for {} in time. "
+                        "Time waited {:.0f} secs.".format(
+                            device, time.perf_counter() - wait_start_time
                         )
-                        break
-
-            except queue.Empty:
-                print(
-                    "Request error got no reply for {}. "
-                    "Time waited {:.0f} secs.".format(
-                        device, time.perf_counter() - wait_start_time
                     )
-                )
+                    message = None
+                    break
+
+        self.wait_api_lock.release()
         return message
 
     def notify(self):
@@ -345,40 +376,40 @@ class GatewayShell(GatewayCliCommands):
         """
         self._shared_state["devices"] = self.device_manager
 
-    def do_toggle_print_minimal_information(self, line):
+    def disabled_do_toggle_print_minimal_information(self, line):
         """
         Switches the byte prints as hex strings or python byte strings
         """
         self._minimal_prints = not self._minimal_prints
         print("Minimal prints: {}".format(self._minimal_prints))
 
-    def do_toggle_byte_print(self, line):
+    def disabled_do_toggle_byte_print(self, line):
         """
         Switches the byte prints as hex strings or python byte strings
         """
         self._bstr_as_hex = not self._bstr_as_hex
         print("hex prints: {}".format(self._bstr_as_hex))
 
-    def do_toggle_pretty_print(self, line):
+    def disabled_do_toggle_pretty_print(self, line):
         """
         Switches between json or pretty print
         """
         self._pretty_prints = not self._pretty_prints
         print("pretty prints: {}".format(self._pretty_prints))
 
-    def do_toggle_silent_loop(self, line):
+    def disabled_do_toggle_silent_loop(self, line):
         """
         Enables/disables the tracking loop verbosity
         """
         self._silent_loop = not self._silent_loop
         print("track loop prints: {}".format(self._silent_loop))
 
-    def do_toggle_raise_errors(self, line):
+    def disabled_do_toggle_raise_errors(self, line):
         """ Sets the raise error toggle """
         self._raise_errors = not self._raise_errors
         print("raise errors: {}".format(self._raise_errors))
 
-    def do_set_loop_iterations(self, line):
+    def disabled_do_set_loop_iterations(self, line):
         """
         Sets the amount of loop iterations
         """
@@ -392,7 +423,7 @@ class GatewayShell(GatewayCliCommands):
             "track loop iterations: {}".format(self._tracking_loop_iterations)
         )
 
-    def do_set_loop_timeout(self, line):
+    def disabled_do_set_loop_timeout(self, line):
         """
         Sets the loop evaluation time
         """
@@ -404,7 +435,7 @@ class GatewayShell(GatewayCliCommands):
         self._tracking_loop_timeout = args["timeout"]
         print("track loop timeout: {}".format(self._tracking_loop_timeout))
 
-    def do_set_reply_greeting(self, line):
+    def disabled_do_set_reply_greeting(self, line):
         """
         Sets the reply greeting
         """
@@ -444,15 +475,15 @@ class GatewayShell(GatewayCliCommands):
         """
         return self.do_bye(line)
 
-    def do_eof(self, line):
+    def disabled_do_eof(self, line):
         """ Captures CTRL-D """
         return self.do_bye(line)
 
-    def do_EOF(self, line):
+    def disabled_do_EOF(self, line):
         """ Captures CTRL-D """
         return self.do_bye(line)
 
-    def do_record(self, arg="shell-session.record"):
+    def disabled_do_record(self, arg="shell-session.record"):
         """
         Saves typed commands in a file for later playback
 
@@ -462,7 +493,7 @@ class GatewayShell(GatewayCliCommands):
         self.close()
         self._file = open(arg, "w")
 
-    def do_playback(self, arg="shell-session.record"):
+    def disabled_do_playback(self, arg="shell-session.record"):
         """
         Plays commands from a file
 
@@ -501,28 +532,28 @@ class GatewayShell(GatewayCliCommands):
 
     def precmd(self, line):
         """ Executes before a command is run in onecmd """
+        with self._flush_lock:  # Either we flush queue or process command
+            self.device_manager = self._shared_state["devices"]
 
-        self.device_manager = self._shared_state["devices"]
+            if (
+                self._file
+                and "playback" not in line
+                and "bye" not in line
+                and "close" not in line
+            ):
+                print(line, file=self._file)
 
-        if (
-            self._file
-            and "playback" not in line
-            and "bye" not in line
-            and "close" not in line
-        ):
-            print(line, file=self._file)
-
-        if self._shared_state["devices"]:
-            self.consume_response_queue()
-            self._trim_queues()
-            self._update_prompt()
+            if self._shared_state["devices"]:
+                self.consume_response_queue()
+                self._update_prompt()
 
         return line
 
     def postcmd(self, stop, line):
         """ Method called after each command is executed """
-        if self._shared_state["devices"]:
-            self._update_prompt()
+        with self._flush_lock:  # Either we flush queue or process command
+            if self._shared_state["devices"]:
+                self._update_prompt()
         return stop
 
     def onecmd(self, line):
@@ -532,17 +563,17 @@ class GatewayShell(GatewayCliCommands):
 
         """
         # pylint: disable=locally-disabled, broad-except
+        with self._flush_lock:  # Either we flush queue or process command
+            if self.exit_signal.is_set():
+                return self.do_bye(line)
 
-        if self.exit_signal.is_set():
-            return self.do_bye(line)
-
-        try:
-            if self.device_manager:
-                return super().onecmd(line)
-        except Exception as err:
-            print("Something went wrong:{}".format(err))
-            if self._raise_errors:
-                raise
+            try:
+                if self.device_manager:
+                    return super().onecmd(line)
+            except Exception as err:
+                print("Something went wrong:{}".format(err))
+                if self._raise_errors:
+                    raise
 
         return False
 

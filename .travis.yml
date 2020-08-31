@@ -16,7 +16,6 @@ script:
   - ./.ci/style-check.sh
   - ./.ci/unit-tests.sh
   - ./.ci/build.sh
-  - ./.ci/service-tests.sh
   - ./.ci/releases.sh
   - source releases.env
 

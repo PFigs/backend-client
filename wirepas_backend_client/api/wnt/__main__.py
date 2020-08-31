@@ -13,7 +13,7 @@
 
 from .handlers import Backend
 from .settings import WNTSettings
-from ...tools import ParserHelper, LoggerHelper
+from wirepas_backend_client.tools import ParserHelper, LoggerHelper
 
 
 def main():

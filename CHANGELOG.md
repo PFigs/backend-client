@@ -1,5 +1,127 @@
 # Changelog
 
+## [v1.3.7-rc.3](https://github.com/wirepas/backend-client/tree/v1.3.7-rc.3) (2020-08-11)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.7-rc.2...v1.3.7-rc.3)
+
+**Merged pull requests:**
+
+- Style check tool for next RC. [\#345](https://github.com/wirepas/backend-client/pull/345) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+
+## [v1.3.7-rc.2](https://github.com/wirepas/backend-client/tree/v1.3.7-rc.2) (2020-08-10)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.7-rc.1...v1.3.7-rc.2)
+
+**Merged pull requests:**
+
+- Fix CTRL+C [\#344](https://github.com/wirepas/backend-client/pull/344) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Remove kpi-tester [\#343](https://github.com/wirepas/backend-client/pull/343) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+
+## [v1.3.7-rc.1](https://github.com/wirepas/backend-client/tree/v1.3.7-rc.1) (2020-08-04)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.6...v1.3.7-rc.1)
+
+**Merged pull requests:**
+
+- Merge machine readable log display format feature. [\#341](https://github.com/wirepas/backend-client/pull/341) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Disable HTTP ACK [\#340](https://github.com/wirepas/backend-client/pull/340) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+
+## [v1.3.6](https://github.com/wirepas/backend-client/tree/v1.3.6) (2020-06-29)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.6-rc.5...v1.3.6)
+
+## [v1.3.6-rc.5](https://github.com/wirepas/backend-client/tree/v1.3.6-rc.5) (2020-06-26)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.6-rc.3...v1.3.6-rc.5)
+
+**Merged pull requests:**
+
+- Fix backend client low performance when handling incoming messages 1000 items/sec [\#336](https://github.com/wirepas/backend-client/pull/336) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Add support for the tags per node statistic [\#334](https://github.com/wirepas/backend-client/pull/334) ([PeiChunyan](https://github.com/PeiChunyan))
+
+## [v1.3.6-rc.3](https://github.com/wirepas/backend-client/tree/v1.3.6-rc.3) (2020-06-12)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.6-rc.2...v1.3.6-rc.3)
+
+**Merged pull requests:**
+
+- Fix memory leak caused by adding handle http request. [\#331](https://github.com/wirepas/backend-client/pull/331) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+
+## [v1.3.6-rc.2](https://github.com/wirepas/backend-client/tree/v1.3.6-rc.2) (2020-06-09)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.6-rc.1...v1.3.6-rc.2)
+
+**Merged pull requests:**
+
+- Add Gatewack response check to HTTP.PY API commands. [\#330](https://github.com/wirepas/backend-client/pull/330) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+
+## [v1.3.6-rc.1](https://github.com/wirepas/backend-client/tree/v1.3.6-rc.1) (2020-06-04)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.5...v1.3.6-rc.1)
+
+**Closed issues:**
+
+- Make Track Data packets output more readable [\#315](https://github.com/wirepas/backend-client/issues/315)
+- Installing Backend Client on macOS [\#176](https://github.com/wirepas/backend-client/issues/176)
+- Add support for querying WNT apis from cmd line [\#74](https://github.com/wirepas/backend-client/issues/74)
+- Add examples on how to use the WNT websocket API [\#73](https://github.com/wirepas/backend-client/issues/73)
+- Move message decoding to wirepas\_messaging \(backend apis\) [\#56](https://github.com/wirepas/backend-client/issues/56)
+- Automatic sourcing of messages [\#33](https://github.com/wirepas/backend-client/issues/33)
+- WM Remote API support [\#31](https://github.com/wirepas/backend-client/issues/31)
+- Daemon loop [\#28](https://github.com/wirepas/backend-client/issues/28)
+- Mesh Device missing methods [\#22](https://github.com/wirepas/backend-client/issues/22)
+- Mesh Management redesign [\#21](https://github.com/wirepas/backend-client/issues/21)
+
+**Merged pull requests:**
+
+- Fix set config [\#328](https://github.com/wirepas/backend-client/pull/328) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Made printing of incoming data packets more user friendly.  [\#327](https://github.com/wirepas/backend-client/pull/327) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Fixed set app config [\#326](https://github.com/wirepas/backend-client/pull/326) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Fix missing update of child tables to MySQL. [\#325](https://github.com/wirepas/backend-client/pull/325) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Print gateway configuration to screen formatted manner [\#324](https://github.com/wirepas/backend-client/pull/324) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+
+## [v1.3.5](https://github.com/wirepas/backend-client/tree/v1.3.5) (2020-06-02)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.5-rc.9...v1.3.5)
+
+## [v1.3.5-rc.9](https://github.com/wirepas/backend-client/tree/v1.3.5-rc.9) (2020-05-29)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v.1.3.5-rc.1...v1.3.5-rc.9)
+
+**Closed issues:**
+
+- Add Ping! command. [\#314](https://github.com/wirepas/backend-client/issues/314)
+- Disable currently broken commands from CLI [\#309](https://github.com/wirepas/backend-client/issues/309)
+- Implement global scratchpad\_update command that also ask nodes to take firmware into use. [\#306](https://github.com/wirepas/backend-client/issues/306)
+- Implement scratchpad\_check command [\#303](https://github.com/wirepas/backend-client/issues/303)
+
+**Merged pull requests:**
+
+- Correct SQL update load number so that show fractions too. [\#323](https://github.com/wirepas/backend-client/pull/323) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Add wm-kpi-tester-helper entry point [\#322](https://github.com/wirepas/backend-client/pull/322) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Whitespace change to make build system happy for release [\#321](https://github.com/wirepas/backend-client/pull/321) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- \#298 [\#320](https://github.com/wirepas/backend-client/pull/320) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Fix imports of modules [\#319](https://github.com/wirepas/backend-client/pull/319) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Refactor code so that has only one starting point. [\#318](https://github.com/wirepas/backend-client/pull/318) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- \#314 [\#317](https://github.com/wirepas/backend-client/pull/317) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Minor refactoring and code base cleaning [\#316](https://github.com/wirepas/backend-client/pull/316) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Removed sink selection from  scratchpad\_ commands.  [\#313](https://github.com/wirepas/backend-client/pull/313) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Console printout improvements to scractchpad\_check\_all [\#312](https://github.com/wirepas/backend-client/pull/312) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- \#309 [\#311](https://github.com/wirepas/backend-client/pull/311) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- \#308 [\#310](https://github.com/wirepas/backend-client/pull/310) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Fix the problem that the missed packet calculation stopped after about [\#307](https://github.com/wirepas/backend-client/pull/307) ([PeiChunyan](https://github.com/PeiChunyan))
+- \#303 \#304 [\#305](https://github.com/wirepas/backend-client/pull/305) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Print black version [\#299](https://github.com/wirepas/backend-client/pull/299) ([PeiChunyan](https://github.com/PeiChunyan))
+
+## [v.1.3.5-rc.1](https://github.com/wirepas/backend-client/tree/v.1.3.5-rc.1) (2020-05-13)
+
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v.1.3.4-rc.5...v.1.3.5-rc.1)
+
+**Merged pull requests:**
+
+- \#289 \#300 \#301  [\#302](https://github.com/wirepas/backend-client/pull/302) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
+- Da reliability [\#297](https://github.com/wirepas/backend-client/pull/297) ([PeiChunyan](https://github.com/PeiChunyan))
+
 ## [v.1.3.4-rc.5](https://github.com/wirepas/backend-client/tree/v.1.3.4-rc.5) (2020-04-09)
 
 [Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.4-rc.4...v.1.3.4-rc.5)
@@ -10,18 +132,11 @@
 
 ## [v1.3.4-rc.4](https://github.com/wirepas/backend-client/tree/v1.3.4-rc.4) (2020-04-09)
 
-[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.4-rc.3...v1.3.4-rc.4)
+[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.4-rc.1...v1.3.4-rc.4)
 
 **Merged pull requests:**
 
 - Minor change to test release script [\#291](https://github.com/wirepas/backend-client/pull/291) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
-
-## [v1.3.4-rc.3](https://github.com/wirepas/backend-client/tree/v1.3.4-rc.3) (2020-04-09)
-
-[Full Changelog](https://github.com/wirepas/backend-client/compare/v1.3.4-rc.1...v1.3.4-rc.3)
-
-**Merged pull requests:**
-
 - Http.py fixes [\#290](https://github.com/wirepas/backend-client/pull/290) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
 - \#266 [\#283](https://github.com/wirepas/backend-client/pull/283) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
 
@@ -36,6 +151,7 @@
 
 **Merged pull requests:**
 
+- Change for the DA KPI testing [\#295](https://github.com/wirepas/backend-client/pull/295) ([PeiChunyan](https://github.com/PeiChunyan))
 - \#267 [\#282](https://github.com/wirepas/backend-client/pull/282) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
 - \#270 [\#281](https://github.com/wirepas/backend-client/pull/281) ([ErkkiSalonenW](https://github.com/ErkkiSalonenW))
 - 4 bytes support added into advertiser address. [\#280](https://github.com/wirepas/backend-client/pull/280) ([kahaapal](https://github.com/kahaapal))
@@ -97,7 +213,6 @@
 - Set a custom gateway and sink id through the cli [\#239](https://github.com/wirepas/backend-client/issues/239)
 - Add toggle to hide MQTT response "acks" [\#228](https://github.com/wirepas/backend-client/issues/228)
 - Add a command to disable the apdu parsing when running the cli [\#167](https://github.com/wirepas/backend-client/issues/167)
-- Refactor gw command line class [\#102](https://github.com/wirepas/backend-client/issues/102)
 
 **Merged pull requests:**
 
@@ -143,8 +258,8 @@
 - ADV decoder [\#222](https://github.com/wirepas/backend-client/pull/222) ([PFigs](https://github.com/PFigs))
 - Dockerfile simplification [\#221](https://github.com/wirepas/backend-client/pull/221) ([PFigs](https://github.com/PFigs))
 - Update adv mysql schema [\#220](https://github.com/wirepas/backend-client/pull/220) ([PFigs](https://github.com/PFigs))
-- ADV reserved field [\#219](https://github.com/wirepas/backend-client/pull/219) ([PFigs](https://github.com/PFigs))
 - Endpoint property [\#218](https://github.com/wirepas/backend-client/pull/218) ([PFigs](https://github.com/PFigs))
+- Diagnostic decoder [\#209](https://github.com/wirepas/backend-client/pull/209) ([PFigs](https://github.com/PFigs))
 - Change .settings to settings/examples.yml [\#181](https://github.com/wirepas/backend-client/pull/181) ([PFigs](https://github.com/PFigs))
 
 ## [v1.2.3](https://github.com/wirepas/backend-client/tree/v1.2.3) (2020-01-16)
@@ -153,10 +268,10 @@
 
 **Merged pull requests:**
 
+- ADV reserved field [\#219](https://github.com/wirepas/backend-client/pull/219) ([PFigs](https://github.com/PFigs))
 - Release v1.2.3 [\#215](https://github.com/wirepas/backend-client/pull/215) ([PFigs](https://github.com/PFigs))
 - Update test vectors [\#213](https://github.com/wirepas/backend-client/pull/213) ([PFigs](https://github.com/PFigs))
 - Update ruuvi.py [\#212](https://github.com/wirepas/backend-client/pull/212) ([PFigs](https://github.com/PFigs))
-- Diagnostic decoder [\#209](https://github.com/wirepas/backend-client/pull/209) ([PFigs](https://github.com/PFigs))
 
 ## [v1.2.2](https://github.com/wirepas/backend-client/tree/v1.2.2) (2020-01-15)
 
@@ -180,6 +295,7 @@
 
 - Update version to v1.2.2.rc3 [\#196](https://github.com/wirepas/backend-client/pull/196) ([PFigs](https://github.com/PFigs))
 - Diagnostics cbor ids [\#195](https://github.com/wirepas/backend-client/pull/195) ([PFigs](https://github.com/PFigs))
+- RC2 for v1.2.2 [\#193](https://github.com/wirepas/backend-client/pull/193) ([PFigs](https://github.com/PFigs))
 
 ## [v1.2.2-rc.2](https://github.com/wirepas/backend-client/tree/v1.2.2-rc.2) (2019-12-20)
 
@@ -187,7 +303,6 @@
 
 **Merged pull requests:**
 
-- RC2 for v1.2.2 [\#193](https://github.com/wirepas/backend-client/pull/193) ([PFigs](https://github.com/PFigs))
 - Update diagnostics [\#192](https://github.com/wirepas/backend-client/pull/192) ([PFigs](https://github.com/PFigs))
 
 ## [v1.2.2-rc.1](https://github.com/wirepas/backend-client/tree/v1.2.2-rc.1) (2019-12-17)
@@ -294,6 +409,7 @@
 **Closed issues:**
 
 - Add PyPi and GH release to travis pipeline [\#123](https://github.com/wirepas/backend-client/issues/123)
+- Refactor gw command line class [\#102](https://github.com/wirepas/backend-client/issues/102)
 - HTTP control cleanup [\#98](https://github.com/wirepas/backend-client/issues/98)
 - Split api module in more manageable submodules [\#94](https://github.com/wirepas/backend-client/issues/94)
 - Optimize container size [\#93](https://github.com/wirepas/backend-client/issues/93)

@@ -17,7 +17,8 @@ import uuid
 import paho
 import paho.mqtt.client as mqtt
 
-from ...tools import Signal
+
+from wirepas_backend_client.tools import Signal
 
 
 class MQTT(object):
@@ -128,6 +129,8 @@ class MQTT(object):
 
         self.subscription = set()
 
+        self.logger.info("MQTT instance created.")
+
     def serve(self: "MQTT"):
         """
         Connects and serves for ever.
@@ -148,7 +151,6 @@ class MQTT(object):
         self.client.loop_start()
 
         while not self.exit_signal.is_set():
-            self.logger.debug("mqtt loop running (timeout %s)", self.heartbeat)
             if self.publish_cb is None:
                 time.sleep(self.heartbeat)
             else:
@@ -168,7 +170,10 @@ class MQTT(object):
         """ Establishes a connection and service loop. """
 
         self.logger.info(
-            "connecting to %s@%s:%s", self.username, self.hostname, self.port
+            "MQTT connecting to %s@%s:%s",
+            self.username,
+            self.hostname,
+            self.port,
         )
 
         if self.force_unsecure is False:
@@ -183,7 +188,9 @@ class MQTT(object):
 
             if self.allow_untrusted:
                 self.logger.warning(
-                    "The MQTT client will skip the certificate name check, which means you might connect to a malicious third party impersonating your server through DNS spoofing."
+                    "MQTT client will skip the certificate name check, "
+                    "which means you might connect to a malicious third "
+                    "party impersonating your server through DNS spoofing."
                     "Please use ALLOW_UNTRUSTED for development purposes only."
                 )
                 self.client.tls_insecure_set(self.allow_untrusted)
@@ -211,11 +218,10 @@ class MQTT(object):
             for topic_filter, cb in handlers.items():
                 self.client.message_callback_add(topic_filter, cb)
                 self.subscription.add(topic_filter)
-                self.logger.info("%s -> %s", topic_filter, cb)
 
             self.message_subscribe_handlers = handlers
         else:
-            self.logger.warning("No subscription handlers set")
+            self.logger.warning("MQTT no subscription handlers set")
 
     def on_close(self: "MQTT") -> None:
         """ Override for handling before closing events, like last will"""
@@ -242,21 +248,19 @@ class MQTT(object):
 
         # Check the connection result.
         if rc == mqtt.CONNACK_ACCEPTED:
-            self.logger.info(
-                "connected to MQTT %s %s", flags, mqtt.connack_string(rc)
-            )
-
+            self.logger.info("MQTT connected")
             for topic in self.subscription:
-                rc, mid = client.subscribe(topic)
+                qos_exactly_once: int = 2
+                rc, mid = client.subscribe(topic, qos=qos_exactly_once)
 
                 if rc == mqtt.MQTT_ERR_SUCCESS:
                     self.logger.info(
-                        "subscribed to topic: %s (%s, %s)", topic, mid, rc
+                        "MQTT subscribed to topic: %s (%s, %s)", topic, mid, rc
                     )
-
-                elif rc == mqtt.MQTT_ERR_SUCCESS:
+                elif rc != mqtt.MQTT_ERR_SUCCESS:
                     self.logger.error(
-                        "failed topic subscription with " "%s: %s (%s, %s)",
+                        "MQTT failed topic subscription with "
+                        "%s: %s (%s, %s)",
                         topic,
                         mid,
                         rc,
@@ -266,7 +270,7 @@ class MQTT(object):
 
         else:
             self.logger.error(
-                "connection error: %s %s", mqtt.error_string(rc), flags
+                "MQTT connection error: %s %s", mqtt.error_string(rc), flags
             )
             self.client.disconnect()
 
@@ -282,8 +286,12 @@ class MQTT(object):
         If the disconnect is due to a call to disconnect, then the
 
         """
+
+        self.logger.info("MQTT disconnected")
         self.logger.error(
-            "disconnect: server is down %s (%s)", mqtt.error_string(rc), rc
+            "MQTT disconnect: server is down %s (%s)",
+            mqtt.error_string(rc),
+            rc,
         )
 
         if rc == mqtt.MQTT_ERR_SUCCESS and self.running:
@@ -306,6 +314,9 @@ class MQTT(object):
         Callback generated when the broker acknowledges a subscription event
         """
         self.logger.mqtt("subscribed with mid: %s / qos: %s", mid, granted_qos)
+        self.logger.info(
+            "MQTT subscribed with mid: %s / qos: %s", mid, granted_qos
+        )
 
     def on_unsubscribe(
         self: "MQTT", client: paho.mqtt.client, userdata: object, mid: int

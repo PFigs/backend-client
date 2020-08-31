@@ -9,14 +9,16 @@
 
 import logging
 
-from ..state import MeshManagement
-from ...api.mqtt import (
+from wirepas_backend_client.mesh.state import MeshManagement
+from wirepas_backend_client.api.mqtt import (
     MQTTObserver,
     Topics,
     decode_topic_message,
     topic_message,
 )
-from ...tools import Signal
+from wirepas_backend_client.tools import Signal
+from threading import Timer
+from queue import Queue
 
 
 class NetworkDiscovery(MQTTObserver):
@@ -44,7 +46,7 @@ class NetworkDiscovery(MQTTObserver):
         message_subscribe_handlers=None,
         publish_cb=None,
         network_parameters=None,
-        **kwargs
+        **kwargs,
     ):
 
         try:
@@ -118,9 +120,32 @@ class NetworkDiscovery(MQTTObserver):
 
         self.shared_state = shared_state
         self.device_manager = MeshManagement()
+        self._debug_comms = False
+        self._perioidicTimer = None  # Set on notify where context is right
+        self._timerRunning: bool = False  # picklable
+        self.data_event_flush_timer_interval_sec: float = 1.0
+
+        self._data_event_tx_queue = Queue()
+
+    def __data_event_perioid_flush_timeout(self):
+
+        txList: list = []
+        while self._data_event_tx_queue.empty() is False:
+            msg = self._data_event_tx_queue.get(True)
+            txList.append(msg)
+            self._data_event_tx_queue.task_done()
+        if len(txList) > 0:
+            self.data_queue.put(txList)
+
+        self._perioidicTimer = Timer(
+            self.data_event_flush_timer_interval_sec,
+            self.__data_event_perioid_flush_timeout,
+        ).start()
 
     def notify(self, message, path="response"):
+
         """ Puts the device on the queue"""
+
         if self.shared_state:
             self.shared_state["devices"] = self.device_manager
 
@@ -129,7 +154,19 @@ class NetworkDiscovery(MQTTObserver):
                 self.response_queue.put(message)
 
             elif "data" in path and self.data_queue:
-                self.data_queue.put(message)
+                # Data message rate is huge compared others. Handle it
+                # different way
+
+                # Put data to internal queue first.
+                self._data_event_tx_queue.put(message)
+
+                # Start on this call context.
+                if self._timerRunning is False:
+                    self._timerRunning = True
+                    self._perioidicTimer = Timer(
+                        self.data_event_flush_timer_interval_sec,
+                        self.__data_event_perioid_flush_timeout,
+                    ).start()
 
             elif "event" in path and self.event_queue:
                 self.event_queue.put(message)
@@ -184,8 +221,6 @@ class NetworkDiscovery(MQTTObserver):
     def send_data(self, timeout: int, block: bool):
         """ Callback provided by the interface's cb generator
             Args:
-                mqtt_publish: callable that handles the message dispatch
-                topic: where the message goes to - ignored if from_message
         """
 
         ret = super(NetworkDiscovery, self).send_data(
@@ -207,7 +242,6 @@ class NetworkDiscovery(MQTTObserver):
         def on_gateway_status_event_cb(payload, topic: list):
             """ Decodes an incoming gateway status event """
 
-            self.logger.debug("status event %s", payload)
             message = self.mqtt_topics.constructor(
                 "event", "status"
             ).from_payload(payload)
@@ -223,7 +257,9 @@ class NetworkDiscovery(MQTTObserver):
         @decode_topic_message
         def on_gateway_data_event_cb(data_message, topic: list):
             """ Decodes an incoming data event callback """
-            self.logger.debug("data event: %s", data_message)
+            if self._debug_comms:
+                self.logger.debug("data event: %s", data_message)
+
             self.device_manager.add_from_mqtt_topic(
                 topic, data_message.source_address
             )
@@ -232,13 +268,16 @@ class NetworkDiscovery(MQTTObserver):
         return on_gateway_data_event_cb
 
     def generate_gateway_response_get_configs_cb(self) -> callable:
-        """ Returns a callback to handle a response with gateway configurations """
+        """ Returns a callback to handle a
+        response with gateway configurations """
 
         @topic_message
         def on_gateway_get_configs_cb(payload, topic: list):
             """ Decodes and incoming configuration response """
 
-            self.logger.debug("configs response: %s", payload)
+            if self._debug_comms:
+                self.logger.debug("configs response: %s", payload)
+
             message = self.mqtt_topics.constructor(
                 "response", "get_configs"
             ).from_payload(payload)
@@ -255,7 +294,9 @@ class NetworkDiscovery(MQTTObserver):
         @topic_message
         def on_gateway_otap_status_cb(payload, topic: list):
             """ Decodes an otap status response """
-            self.logger.debug("otap status response: %s", payload)
+            if self._debug_comms:
+                self.logger.debug("otap status response: %s", payload)
+
             message = self.mqtt_topics.constructor(
                 "response", "otap_status"
             ).from_payload(payload)
@@ -264,12 +305,15 @@ class NetworkDiscovery(MQTTObserver):
         return on_gateway_otap_status_cb
 
     def generate_gateway_response_set_config_cb(self) -> callable:
-        """ Returns a callback to handle responses to configuration set requests """
+        """ Returns a callback to handle
+        responses to configuration set requests """
 
         @topic_message
         def on_gateway_set_config_response_cb(payload, topic: list):
             """ Decodes a set config response """
-            self.logger.debug("set config response: %s", payload)
+            if self._debug_comms:
+                self.logger.debug("set config response: %s", payload)
+
             message = self.mqtt_topics.constructor(
                 "response", "set_config"
             ).from_payload(payload)
@@ -283,7 +327,9 @@ class NetworkDiscovery(MQTTObserver):
         @topic_message
         def on_gateway_data_response_cb(payload, topic: list):
             """ Decodes a data response """
-            self.logger.debug("send data response: %s", payload)
+            if self._debug_comms:
+                self.logger.debug("send data response: %s", payload)
+
             self.device_manager.add_from_mqtt_topic(topic)
             message = self.mqtt_topics.constructor(
                 "response", "send_data"
@@ -294,12 +340,15 @@ class NetworkDiscovery(MQTTObserver):
         return on_gateway_data_response_cb
 
     def generate_gateway_load_scratchpad_response_cb(self) -> callable:
-        """ Returns a callback to handle the loading of a scratchpad into the target sink """
+        """ Returns a callback to handle the
+        loading of a scratchpad into the target sink """
 
         @topic_message
         def on_gateway_load_scratchpad_response_cb(payload, topic: list):
             """ """
-            self.logger.debug("load scratchpad response: %s", payload)
+            if self._debug_comms:
+                self.logger.debug("load scratchpad response: %s", payload)
+
             message = self.mqtt_topics.constructor(
                 "response", "otap_load_scratchpad"
             ).from_payload(payload)
@@ -313,7 +362,8 @@ class NetworkDiscovery(MQTTObserver):
         @topic_message
         def on_gateway_process_scratchpad_cb(payload, topic: list):
             """ """
-            self.logger.debug("process scratchpad response: %s", payload)
+            if self._debug_comms:
+                self.logger.debug("process scratchpad response: %s", payload)
             message = self.mqtt_topics.constructor(
                 "response", "otap_process_scratchpad"
             ).from_payload(payload)

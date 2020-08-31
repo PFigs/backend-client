@@ -13,12 +13,11 @@ import logging
 import multiprocessing
 import queue
 
-from .connectors import MQTT
-from .decorators import decode_topic_message
-from .mqtt_options import MQTT_QOS_options
-from ..stream import StreamObserver
-
-from ...tools import Settings
+from wirepas_backend_client.api.mqtt.connectors import MQTT
+from wirepas_backend_client.api.mqtt.decorators import decode_topic_message
+from wirepas_backend_client.api.mqtt.mqtt_options import MQTTqosOptions
+from wirepas_backend_client.api.stream import StreamObserver
+from wirepas_backend_client.tools import Settings
 
 
 class MQTTObserver(StreamObserver):
@@ -57,9 +56,6 @@ class MQTTObserver(StreamObserver):
             self.message_subscribe_handlers = {"#": self.simple_mqtt_print}
         else:
             self.message_subscribe_handlers = message_subscribe_handlers
-
-        for topic, cb in self.message_subscribe_handlers.items():
-            self.logger.debug("%s-->%s", topic, cb)
 
         if publish_cb is None:
             self.publish_cb = self.generate_data_send_cb()
@@ -128,12 +124,13 @@ class MQTTObserver(StreamObserver):
         topic, qos, retain, wait_for_publish, data
 
         """
+
         try:
             message = self.rx_queue.get(timeout=timeout, block=block)
         except queue.Empty:
             return False
 
-        qos = MQTT_QOS_options.exactly_once.value
+        qos = MQTTqosOptions.exactly_once.value
         retain = False
         wait_for_publish = False
         data = None
@@ -156,8 +153,10 @@ class MQTTObserver(StreamObserver):
                 data = message["data"].payload
             except AttributeError:
                 data = message["data"]
-
-        self.logger.debug("message for MQTT publish %s", message)
+            except TypeError:
+                data = None
+            except Exception:
+                data = None
 
         if data is not None and topic is not None:
             self.mqtt.send(

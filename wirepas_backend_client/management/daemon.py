@@ -12,6 +12,8 @@ import logging
 import multiprocessing
 import time
 
+queue_max_size: int = 100000
+
 
 class Daemon(object):
     """
@@ -60,8 +62,8 @@ class Daemon(object):
     def _process_details(self) -> dict:
         """ Initialises the process entry dictionary """
         return dict(
-            tx_queue=self._manager.Queue(),
-            rx_queue=self._manager.Queue(),
+            tx_queue=self._manager.Queue(queue_max_size),
+            rx_queue=self._manager.Queue(queue_max_size),
             exit_signal=None,
             object=None,
             object_kwargs=None,
@@ -84,13 +86,12 @@ class Daemon(object):
 
     def create_queue(self):
         """ Creates and returns a new manager queue """
-        return self._manager.Queue()
+        return self._manager.Queue(queue_max_size)
 
     def wait_loop(self):
         """ Default loop. Waits until an exit signal is given or the processes are dead"""
         try:
             while not self.exit_signal.is_set():
-                self.logger.debug("daemon is watching %s", self.heartbeat)
                 for _, register in self.process.items():
                     try:
                         if not register["object"].is_alive():
@@ -127,6 +128,8 @@ class Daemon(object):
         """ Creates the object which will interact with the process """
 
         self.init_process(name)
+
+        self.logger.info("Queues max size is {} items.".format(queue_max_size))
 
         if "start_signal" not in kwargs:
             kwargs["start_signal"] = self.start_signal
@@ -171,7 +174,6 @@ class Daemon(object):
 
         self.process[name]["runtime"]["kwargs"] = dict()
         self.process[name]["runtime"]["as_daemon"] = True
-
         return obj
 
     def set_run(self, name, task=None, task_kwargs=None, task_as_daemon=None):
@@ -195,6 +197,17 @@ class Daemon(object):
     def start(self, set_start_signal=False):
         """ Starts the processes and executes the loop """
 
+        self.init_processes()
+
+        if set_start_signal:
+            self.start_signal.set()
+
+        self.run_processes()
+        self.shutdown_processes()
+
+        self.logger.debug("daemon has left")
+
+    def init_processes(self):
         for name, register in self.process.items():
             if "main" in name:
                 continue
@@ -207,26 +220,11 @@ class Daemon(object):
                 )
 
                 register["runtime"]["object"].start()
-                self.logger.debug("started process: %s", name)
             except (KeyError, TypeError):
                 self.logger.exception("Failed to start services")
                 raise
 
-        if set_start_signal:
-            self.start_signal.set()
-
-        try:
-            self.logger.debug("entering daemon's wait loop: %s", self.loop_cb)
-            self.loop_cb(**self.loop_kwargs)
-        except KeyboardInterrupt:
-            self.exit_signal.set()
-        except Exception as err:
-            self.logger.exception(
-                "main execution loop exited with error %s", err
-            )
-            if not self.exit_signal.is_set():
-                self.exit_signal.set()
-
+    def shutdown_processes(self):
         for name, register in self.process.items():
             self.logger.debug("daemon killing %s", name)
             if "main" in name:
@@ -242,4 +240,22 @@ class Daemon(object):
                 self.logger.exception("error killing %s: %s", name, err)
                 continue
 
-        self.logger.debug("daemon has left")
+    def run_processes(self):
+        try:
+            self.logger.debug("entering daemon's wait loop: %s", self.loop_cb)
+            self.loop_cb(**self.loop_kwargs)
+        except KeyboardInterrupt:
+            try:
+                self.exit_signal.set()
+            except ConnectionResetError:
+                pass
+
+        except Exception as err:
+            self.logger.exception(
+                "main execution loop exited with error %s", err
+            )
+            if not self.exit_signal.is_set():
+                try:
+                    self.exit_signal.set()
+                except ConnectionResetError:
+                    pass

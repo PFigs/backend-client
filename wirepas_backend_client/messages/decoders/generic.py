@@ -16,7 +16,7 @@ import logging
 import wirepas_messaging
 
 from ..types import ApplicationTypes
-from ...tools import flatten
+from wirepas_backend_client.tools import flatten
 
 
 class GenericMessage(wirepas_messaging.gateway.api.ReceivedDataEvent):

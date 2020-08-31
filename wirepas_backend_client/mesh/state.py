@@ -7,8 +7,8 @@
         See file LICENSE for full license details.
 """
 
-from .gateway import Gateway
-from .network import Network
+from wirepas_backend_client.mesh.gateway import Gateway
+from wirepas_backend_client.mesh.network import Network
 
 
 class MeshManagement(object):
@@ -171,7 +171,8 @@ class MeshManagement(object):
             del self._gateways[device_id]
 
         for network in self._networks.values():
-            network.remove(device_id)
+            if device_id in network:
+                network.remove(device_id)
 
     def __str__(self):
         obj = ""

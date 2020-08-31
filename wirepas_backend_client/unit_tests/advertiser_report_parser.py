@@ -1,6 +1,7 @@
 import pandas
 import datetime
-import wirepas_gateway_client
+
+import wirepas_backend_client
 
 
 def push_to_fluentd(df, logger):
@@ -28,8 +29,8 @@ def push_to_fluentd(df, logger):
 if __name__ == "__main__":
 
     stats = dict()
-    args = wirepas_gateway_client.tools.parse_args()
-    logger = wirepas_gateway_client.tools.setup_log(
+    args = wirepas_backend_client.tools.parse_args()
+    logger = wirepas_backend_client.tools.setup_log(
         "adv_test_history",
         fluentd_tag="python",
         fluentd_record="adv_test",

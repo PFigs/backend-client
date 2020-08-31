@@ -9,7 +9,7 @@
 
 from functools import wraps
 import wirepas_messaging
-from ...messages.interface import MessageManager
+from wirepas_backend_client.messages.interface import MessageManager
 
 
 def decode_topic_message(f):

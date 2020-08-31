@@ -1,8 +1,8 @@
 import json
 import wirepas_messaging
 import datetime
-from wirepas_backend_client.tools import LoggerHelper
 
+from wirepas_backend_client.tools import LoggerHelper
 from wirepas_backend_client.messages.interface import MessageManager
 
 LoggerHelper(module_name="message_decoding").setup()
@@ -47,7 +47,7 @@ def test_exception_handling():
     """ This test ensures that incorrect payloads do not crash the decoder """
 
     messages = get_traffic(
-        "./tests/files/received_messages_incorrect_apdu.json"
+        "./unit_tests/files/received_messages_incorrect_apdu.json"
     )
 
     for message in messages:
@@ -69,7 +69,7 @@ def test_received_messages():
     ignore_keys = ["network_id", "event_id", "received_at", "transport_delay"]
 
     stats = dict()
-    messages = get_traffic("./tests/files/received_messages.json")
+    messages = get_traffic("./unit_tests/files/received_messages.json")
 
     for message in messages:
 

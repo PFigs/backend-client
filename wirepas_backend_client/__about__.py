@@ -15,7 +15,7 @@ __classifiers__ = [
     "Topic :: Software Development :: Libraries",
     "Programming Language :: Python :: 3",
 ]
-__copyright__ = "2019 Wirepas Ltd"
+__copyright__ = "2020 Wirepas Ltd"
 __description__ = "Interfaces to interact with Wirepas backend services."
 __keywords__ = "wirepas connectivity iot mesh"
 __license__ = "Apache-2"

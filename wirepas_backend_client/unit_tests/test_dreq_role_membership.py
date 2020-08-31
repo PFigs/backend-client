@@ -1,11 +1,12 @@
 import json
 import wirepas_messaging
 import datetime
-from wirepas_backend_client.tools import LoggerHelper
 
+from wirepas_backend_client.tools import LoggerHelper
 from wirepas_backend_client.messages.interface import MessageManager
 
 LoggerHelper(module_name="message_decoding").setup()
+
 
 # flake8: noqa
 
@@ -45,7 +46,6 @@ def get_role_fields(filepath):
 
 
 def build_wire_message(record):
-
     wire_message = wirepas_messaging.gateway.api.ReceivedDataEvent(
         record["gw_id"],
         record["sink_id"],
@@ -73,7 +73,6 @@ def parse_wire_message(message):
 
 
 def assert_diagnostic_role_content(apdu, role, fields):
-
     found_fields = list()
     for key, value in apdu.items():
         for field in fields[role]:
@@ -134,7 +133,7 @@ def test_dreq_content():
 
     roles_map = dualmcu_roles
 
-    messages = get_traffic("./tests/files/received_messages.json")
+    messages = get_traffic("./unit_tests/files/received_messages.json")
 
     for message in messages:
 
@@ -146,7 +145,7 @@ def test_dreq_content():
         wire_message = build_wire_message(record)
         parsed_message = parse_wire_message(wire_message)
         diagnostic_fields = get_role_fields(
-            "./tests/definitions/role_field_dreq.json"
+            "./unit_tests/definitions/role_field_dreq.json"
         )
 
         if (

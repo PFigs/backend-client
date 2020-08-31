@@ -7,7 +7,7 @@
         See file LICENSE for full license details.
 """
 
+from .cli_starter import start_cli
 from .shell import GatewayShell
-from .__main__ import main as cli_main
 
-__all__ = ["GatewayShell", "cli_main"]
+__all__ = ["GatewayShell", "start_cli"]

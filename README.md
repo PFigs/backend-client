@@ -1,6 +1,16 @@
 # Backend-client
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/wirepas/backend-client)
+## Under consideration to be deprecated!
+
+The current architecture of the backend client does not support easy addition of new features and there are quite many stability issues. Based on the initial analysis, major refactoring would be needed to make Backend client to support all the current use cases reliably. Hence, we are considering to break current backend client into focused functionalities that have value for wider community. This may imply that existing functionality is not supported anymore or it is supported in a new repository. More on this as work proceeds.
+
+
+
+
+
+
+
+
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/bf0c23237cf04ea6ac48e98cf10b6a7b)](https://www.codacy.com/manual/wirepas/backend-client?utm_source=github.com&utm_medium=referral&utm_content=wirepas/backend-client&utm_campaign=Badge_Grade) [![Build Status](https://travis-ci.com/wirepas/backend-apis.svg?branch=master)](https://travis-ci.com/wirepas/backend-client)  [![Documentation Status](https://readthedocs.org/projects/backend-client/badge/?version=latest)](https://backend-client.readthedocs.io/en/latest/?badge=latest) [![PyPi](https://img.shields.io/pypi/v/wirepas-backend-client.svg)](https://pypi.org/project/wirepas-backend-client/)
 
@@ -77,9 +87,8 @@ thus require the installation of specific development headers.
 Under Debian, the extra requirements are met with:
 
 ```bash
-    sudo apt-get install default-libmysqlclient-dev \
-                         gcc \
-                         python3-dev
+    sudo apt-get install default-libmysqlclient-dev gcc python3.7-dev
+    
 ```
 
 Please be advised that the name of such packages might change depending on your
@@ -271,14 +280,7 @@ The operation happens as messages are published from the network. It
 will take time to build a full map of the network, which will be faster
 depending on your network's packets per second.
 
-To browse the devices, please type:
-
-```shell
-    wm-gw-cli > ls
-```
-
-The output will show the devices that have been currently found. In case
-you wish to view periodically which devices you have on your network,
+In case you wish to view periodically which devices you have on your network,
 type in the following command:
 
 ```shell
@@ -399,77 +401,6 @@ As an example, on the wm-gw-cli you would type:
 
 The answer will carry the gateway result and present you the new app
 config.
-
-##### Viewing gateway configuration
-
-The wm-gw-cli allows you to see the current gateway configuration by typing:
-
-```shell
-    wm-gw-cli > gateway_configuration
-    requesting configuration for 2485378023427
-    answer <<
-        gw_id: 2485378023427
-        sink_id: None
-        req_ gw_id: 2485378023427
-        sink_id: sink0
-        req_id: 12079559850249952277
-        res: GatewayResultCode.GW_RES_OK
-        sink_id: sink0
-        current_ac_range_min: 2000
-        current_ac_range_max: 8000
-        min_ac: 2000
-        max_ac: 8000
-        max_mtu: 102
-        min_ch: 1
-        max_ch: 27
-        hw_magic: 3
-        stack_profile: 1
-        app_config_max_size: 80
-        are_keys_set: False
-        firmware_version: [3, 4, 37, 0]
-        node_role: 17
-        node_address: 4193520
-        network_address: 3806491
-        network_channel: 22
-        app_config_diag: 30
-        app_config_seq: 10
-        app_config_data:
-        b git'sink_by_the_window\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00'
-        channel_map: 286331153
-        started: Trueid: 13018941017451207243
-        res: GatewayResultCode.GW_RES_OK
-        sink_id: sink0
-        node_role: 17
-        node_address: 4193520
-        network_address: 3806491
-        network_channel: 22
-        app_config_diag: 30
-        app_config_seq: 10
-        app_config_data:
-        b'sink_by_the_window\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
-        \x00\x00\x00'
-        channel_map: 286331153
-        started: True
-        current_ac_range_min: 2000
-        current_ac_range_max: 8000
-        min_ac: 2000
-        max_ac: 8000
-        max_mtu: 102
-        min_ch: 1
-        max_ch: 27
-        hw_magic: 3
-        stack_profile: 1
-        app_config_max_size: 80
-        are_keys_set: False
-        firmware_version: [3, 4, 37, 0]
-```
 
 ##### Upload and process a scratchpad
 
@@ -642,46 +573,6 @@ purpose utility methods and classes.
 Currently still a [single file][wm_gw_cli], this upcoming submodule
 will contain a re-factor of the gateway client to allow easier
 customization and construction of custom command line interfaces.
-
-### Examples
-
-To better understand the framework inner-working and how you can extend it,
-we recommend that you take a look at the examples
-we have available in the [examples folder][examples]:
-
--   [mqtt_viewer.py][examples_mqtt_viewer]: connects to a MQTT broker and
-    decodes on the fly any message that is known to the
-    framework (see [cookbook][wirepas_cookbook_viz] for usage example)
-
--   [find_all_nodes.py][examples_find_all_nodes]: simple interaction with
-    the Gateway to Backend API that enumerates and prints outs discovered devices
-
--   [influx_viewer.py][examples_influx_viewer]: run custom queries or
-    export date ranges from an influx database where WNT is storing data
-
--   [settings.yml][example_settings]: an example of a yaml file that with
-    commented out settings
-
--   [provisioning_config.yml][example_provisioning]: an example of a yaml file
-    for the provisioning server
-
-Backend Client's entrypoints also act as a good way to guide your development:
-
--   [wm-gw-cli][wm_gw_cli]: code behind the gateway command line
-    interface that exemplifies how to build requests to the sink,
-    receive and send data packets
-
--   [wm-wnt-viewer][wm_wnt]: example on how to consume data streamed
-    by a WNT backend
-
--   [wm-wpe-viewer][wm_wpe]: example on how to consume data streamed
-    by a WPE backend
-
--   [wm-provisioning-server][provisioning_server]: an example implementation
-    of the server side of the wirepas provisioning protocol
-
-For an example on how to build use case test cases, please refer to
-the [kpi_adv.py][kpi_adv] script.
 
 ## Logging to fluentd
 

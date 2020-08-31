@@ -1,19 +1,18 @@
 from time import sleep
 from time import time
+from datetime import datetime
 
 # multiple definitions exists
+from wirepas_backend_client.api.mqtt import Topics
 from wirepas_messaging.gateway.api import GatewayResultCode
+from wirepas_backend_client.mesh.state import MeshManagement
 
-from wirepas_backend_client.api import Topics
-from wirepas_backend_client.cli.set_diagnostics.fea_set_neighbor_diagnostic_message_builder import (
+from wirepas_backend_client.mesh.set_diagnostics.fea_set_neighbor_diagnostic_message_builder import (
     ControlMessage,
     DiagnosticControlMessageBuilder,
     SetDiagnosticsIntervals,
     SendToSinkOnly,
 )
-from wirepas_backend_client.mesh.state import MeshManagement
-
-from datetime import datetime
 
 
 class DiagnosticActivationStatus:
@@ -88,7 +87,7 @@ class SetDiagnostics:
         return ret
 
     def _getElapsedTimeSting(self):
-        end = time.time()
+        end = time()
         elapsedSecs = end - self._operationStart
         ret = str(
             datetime.now().strftime("%H:%M.%S")
@@ -176,7 +175,7 @@ class SetDiagnostics:
 
         if self._processingActive:
 
-            self._operationStart = time.time()
+            self._operationStart = time()
 
             networkSinks: dict
             networkSinks = self.getSinksBelongingToNetwork(

@@ -39,11 +39,7 @@ function run_test()
 
 pull_dependencies
 
-run_test "/usr/bin/tools/wait-for-it/wait-for-it.sh mysql:3306 -s -t 20 -- python -m wirepas_backend_client.test.kpi_mesh"
-run_test "python -m wirepas_backend_client.test.kpi_adv" "5"
-
 run_test "python /home/wirepas/.local/wirepas_backend_client-extras/examples/mqtt_viewer.py"  "5"
-run_test "python /home/wirepas/.local/wirepas_backend_client-extras/examples/influx_viewer.py" "5"
 run_test "python /home/wirepas/.local/wirepas_backend_client-extras/examples/find_all_nodes.py" "2"
 
 run_test "wm-gw-cli" "5"

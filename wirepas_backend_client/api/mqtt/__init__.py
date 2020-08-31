@@ -12,18 +12,21 @@
 """
 
 
-from .connectors import MQTT
-from .decorators import decode_topic_message, topic_message
-from .handlers import MQTTObserver
-from .settings import MQTTSettings
-from .topics import Topics
-from .mqtt_options import MQTT_QOS_options
+from wirepas_backend_client.api.mqtt.connectors import MQTT
+from wirepas_backend_client.api.mqtt.decorators import (
+    decode_topic_message,
+    topic_message,
+)
+from wirepas_backend_client.api.mqtt.handlers import MQTTObserver
+from wirepas_backend_client.api.mqtt.mqtt_options import MQTTqosOptions
+from wirepas_backend_client.api.mqtt.settings import MQTTSettings
+from wirepas_backend_client.api.mqtt.topics import Topics
 
 __all__ = [
     "MQTT",
     "MQTTObserver",
     "MQTTSettings",
-    "MQTT_QOS_options",
+    "MQTTqosOptions",
     "Topics",
     "decode_topic_message",
     "topic_message",

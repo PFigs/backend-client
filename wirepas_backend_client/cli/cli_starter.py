@@ -10,10 +10,11 @@
 
 
 from .shell import GatewayShell
-from ..management import Daemon
-from ..mesh.interfaces.mqtt import NetworkDiscovery
-from ..tools import ParserHelper, LoggerHelper
-from ..api import MQTTSettings
+
+from wirepas_backend_client.management import Daemon
+from wirepas_backend_client.mesh.interfaces.mqtt import NetworkDiscovery
+from wirepas_backend_client.tools import ParserHelper, LoggerHelper
+from wirepas_backend_client.api.mqtt import MQTTSettings
 
 
 def launch_gw_cli(settings, logger):
@@ -52,7 +53,7 @@ def launch_gw_cli(settings, logger):
     daemon.start()
 
 
-def main():
+def start_cli():
     """ entrypoint loop """
 
     parser = ParserHelper("Gateway client arguments")
@@ -73,8 +74,3 @@ def main():
     else:
         print("Please review your connection settings")
         print(settings)
-
-
-if __name__ == "__main__":
-
-    main()

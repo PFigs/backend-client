@@ -3,6 +3,7 @@
 set -e
 set -x
 
+black --version
 black --check .
 
 flake8

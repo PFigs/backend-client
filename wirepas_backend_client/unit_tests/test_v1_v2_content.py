@@ -52,10 +52,10 @@ def compare_diagnostic_packets(mapping: dict, packets: dict) -> bool:
 def test_v1_v2_content():
     """ Asserts the match or mismatch between diagnostic packets' content """
 
-    with open("./tests/definitions/v1_v2.json") as mapping_instructions:
+    with open("./unit_tests/definitions/v1_v2.json") as mapping_instructions:
         mapping = json.load(mapping_instructions)
 
-    with open("./tests/files/v1_v2_traces.json") as mqtt_traffic:
+    with open("./unit_tests/files/v1_v2_traces.json") as mqtt_traffic:
         messages = mqtt_traffic.readlines()
 
     delta = __DIAGNOSTIC_INTERVAL * 10

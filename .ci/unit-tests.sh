@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 
 set -e
-pytest
+cd wirepas_backend_client
+python -m pytest .

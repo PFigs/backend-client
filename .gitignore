@@ -44,3 +44,9 @@ settings.yml
 tests/services/wait-for-it/*
 .*secret*
 examples/settings.yml
+
+wirepas_backend_client/.idea/
+
+wirepas_backend_client/venv/
+
+venv/

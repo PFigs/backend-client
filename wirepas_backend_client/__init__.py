@@ -9,9 +9,9 @@
         Copyright 2019 Wirepas Ltd under Apache License, Version 2.0.
         See file LICENSE for full license details.
 """
-from . import api
-from . import management
-from . import messages
-from . import test
+from wirepas_backend_client import api
+from wirepas_backend_client import management
+from wirepas_backend_client import messages
+from wirepas_backend_client import tools
 
-__all__ = ["api", "management", "messages", "test"]
+__all__ = ["api", "management", "messages", "tools"]

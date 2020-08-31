@@ -8,3 +8,4 @@
 
 from .daemon import Daemon
 from .inventory import Inventory
+from .inventory import Reliability

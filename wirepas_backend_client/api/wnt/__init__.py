@@ -13,8 +13,8 @@
 
 from . import manager
 from .__main__ import main as wnt_main
+from .connectors import WNTSocket
 from .handlers import Backend
 from .settings import WNTSettings
-from .connectors import WNTSocket
 
-__all__ = ["Backend", "WNTSettings", "WNTSocket"]
+__all__ = ["Backend", "WNTSettings", "WNTSocket", "wnt_main"]

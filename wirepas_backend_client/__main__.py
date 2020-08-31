@@ -9,10 +9,12 @@
         See file LICENSE for full license details.
 """
 
-from .api.wnt import wnt_main
-from .api.wpe import wpe_main
-from .provisioning import prov_main
-from .cli import cli_main
+import argparse
+
+from wirepas_backend_client.api.wnt import wnt_main
+from wirepas_backend_client.api.wpe import wpe_main
+from wirepas_backend_client.cli import start_cli
+from wirepas_backend_client.provisioning import prov_main
 
 
 def wnt_client():
@@ -22,7 +24,7 @@ def wnt_client():
 
 def gw_cli():
     """ launches the gateway client """
-    cli_main()
+    start_cli()
 
 
 def wpe_client():
@@ -31,9 +33,16 @@ def wpe_client():
 
 
 def provisioning_server():
-    """ launches the provisioing server """
+    """ launches the provisioning server """
     prov_main()
 
 
-if __name__ == "__main__":
+def start_backend_client():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--settings", help="settings help")
+    parser.parse_args()
     gw_cli()
+
+
+if __name__ == "__main__":
+    start_backend_client()

@@ -10,7 +10,7 @@
 from enum import Enum
 
 
-class MQTT_QOS_options(Enum):
+class MQTTqosOptions(Enum):
     at_most_once = 0
     at_least_once = 1
     exactly_once = 2

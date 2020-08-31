@@ -18,4 +18,4 @@ from .__main__ import main as wpe_main
 from .connectors import Service
 from .settings import WPESettings
 
-__all__ = ["Service", "WPESettings"]
+__all__ = ["Service", "WPESettings", "wpe_main"]

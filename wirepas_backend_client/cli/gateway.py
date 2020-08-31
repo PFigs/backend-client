@@ -13,20 +13,71 @@
 
 import cmd
 import json
+import threading
+from time import sleep, perf_counter
 
-from wirepas_messaging.gateway.api import GatewayState
-from wirepas_messaging.gateway.api import GatewayResultCode
-
-from wirepas_backend_client.cli.set_diagnostics.fea_set_neighbor_diagnostics import (
+# --
+from wirepas_backend_client.api.mqtt import MQTTqosOptions
+from wirepas_backend_client.mesh.gateway import Gateway
+from wirepas_backend_client.mesh.set_diagnostics.fea_set_neighbor_diagnostics import (
     SetDiagnostics,
     SetDiagnosticsIntervals,
 )
-from ..api.mqtt import MQTT_QOS_options
-from ..mesh.sink import Sink
-from ..mesh.gateway import Gateway
+from wirepas_backend_client.mesh.sink import Sink
 
-import threading
-from time import sleep
+from wirepas_backend_client.messages.msap_cmds import (
+    MsapBeginReq,
+    MsapBeginResp,
+    MsapCancelReq,
+    MsapCancelResp,
+    MsapEndReq,
+    MsapEndResp,
+    MsapScratchPadStatusReq,
+    MsapScratchPadStatusResp,
+    MsapScratchpadUpdateReq,
+    MsapScratchpadUpdateResp,
+    MsapUpdateReq,
+    MsapUpdateResp,
+    MsapPingReq,
+    MsapPingResp,
+)
+
+from wirepas_messaging.gateway.api import GatewayResultCode
+from wirepas_messaging.gateway.api import GatewayState
+
+end_point_this_source: int = 255
+end_point_default_diagnostic_control: int = 240
+address_broadcast: int = 4294967295
+maxPacketSizeBytes: int = 102
+versionFmtFieldWidthStr: str = "x.x.x.xx "
+
+
+def printItem(itemName: str, fieldWidth: int) -> None:
+    print("{}".format(itemName).ljust(fieldWidth))
+
+
+def addFieldFormatterToStr(itemName: str, fieldWidth: int) -> str:
+    return "{}".format(itemName).ljust(fieldWidth)
+
+
+def getStackSwVersionStr(otap_status: MsapScratchPadStatusResp) -> str:
+    s = "{}.{}.{}.{}".format(
+        otap_status.FWmajorVer[0],
+        otap_status.FWminorVer[0],
+        otap_status.FWmaintVer[0],
+        otap_status.FWdevelVer[0],
+    )
+    return s.ljust(len(versionFmtFieldWidthStr))
+
+
+def getAppSwVersionStr(otap_status: MsapScratchPadStatusResp) -> str:
+    s = "{}.{}.{}.{}".format(
+        otap_status.appMajorVer[0],
+        otap_status.appMinorVer[0],
+        otap_status.appMaintVer[0],
+        otap_status.appDevelVer[0],
+    )
+    return s.ljust(len(versionFmtFieldWidthStr))
 
 
 class GatewayCliCommands(cmd.Cmd):
@@ -71,21 +122,21 @@ class GatewayCliCommands(cmd.Cmd):
         self._responseQueueMessageHandler = None
 
     @property
-    def gateway(self):
+    def gateway(self) -> object:
         """
         Returns the currently selected gateway
         """
         return self._selection["gateway"]
 
     @property
-    def sink(self):
+    def sink(self) -> object:
         """
         Returns the currently selected sink
         """
         return self._selection["sink"]
 
     @property
-    def network(self):
+    def network(self) -> object:
         """
         Returns the currently selected network
         """
@@ -179,7 +230,7 @@ class GatewayCliCommands(cmd.Cmd):
         if self._display_pending_event:
             self.on_print(message, "Pending event message <<")
 
-    def do_toggle_print_pending_responses(self, line):
+    def disabled_do_toggle_print_pending_responses(self, line):
         """
         When True prints any response that is going to be discarded
         """
@@ -190,14 +241,14 @@ class GatewayCliCommands(cmd.Cmd):
             )
         )
 
-    def do_toggle_print_pending_events(self, line):
+    def disabled_do_toggle_print_pending_events(self, line):
         """
         When True prints any event that is going to be discarded
         """
         self._display_pending_event = not self._display_pending_event
         print("display pending events: {}".format(self._display_pending_event))
 
-    def do_toggle_print_pending_data(self, line):
+    def disabled_do_toggle_print_pending_data(self, line):
         """
         When True prints any data that is going to be discarded
         """
@@ -205,7 +256,7 @@ class GatewayCliCommands(cmd.Cmd):
         print("display pending events: {}".format(self._display_pending_data))
 
     # track status
-    def do_track_devices(self, line):
+    def disabled_do_track_devices(self, line):
         """
         Displays the current selected devices for the desired amount of time.
 
@@ -251,10 +302,10 @@ class GatewayCliCommands(cmd.Cmd):
             - iterations=Inf
             - update_rate=1 # period to print status if no message is acquired
             - show_events=False # will display answers as well
-            - silent=False # when True the loop number is not printed
+            - machine_format=False # If yes, format is formatted to machine readable format.
 
         Returns:
-            Prints
+            Prints messages to console
         """
 
         options = dict(
@@ -267,7 +318,8 @@ class GatewayCliCommands(cmd.Cmd):
             iterations=dict(type=int, default=float("Inf")),
             update_rate=dict(type=int, default=1),
             show_events=dict(type=bool, default=False),
-            silent=dict(type=bool, default=False),
+            silent=dict(type=bool, default=True),
+            machine_format=dict(type=bool, default=False),
         )
 
         args = self.retrieve_args(line, options)
@@ -282,6 +334,7 @@ class GatewayCliCommands(cmd.Cmd):
             gw_id = kwargs.get("gw_id", None)
             sink_id = kwargs.get("sink_id", None)
             show_events = kwargs.get("show_events", None)
+            machine_format = kwargs.get("machine_format", None)
 
             def print_on_match(message):
                 if (
@@ -296,10 +349,35 @@ class GatewayCliCommands(cmd.Cmd):
                         message, "destination_endpoint", destination_endpoint
                     )
                 ):
-                    cli.on_print(message)
+                    if machine_format is True:
+                        print(message)
+                    else:
+                        address_str = (
+                            "nw:{}/{}/{}/node:{} sendp:{}".format(
+                                message.network_id,
+                                message.gw_id,
+                                message.sink_id,
+                                message.source_address,
+                                message.source_endpoint,
+                            )
+                        ).ljust(60)
+                        travel_time_str = str(
+                            "travel time: {}".format(message.travel_time_ms)
+                        ).ljust(19)
+                        data_str = str(
+                            "data: {}".format(message.data_payload.hex())
+                        )
 
-            for message in cli.consume_data_queue():
-                print_on_match(message)
+                        print(
+                            "{} {} {}".format(
+                                address_str, travel_time_str, data_str
+                            )
+                        )
+
+            msgs = cli.get_messages_from_data_queue()
+            if msgs is not None:
+                for msg in msgs:
+                    print_on_match(msg)
 
             if show_events:
                 for message in cli.consume_event_queue():
@@ -309,7 +387,7 @@ class GatewayCliCommands(cmd.Cmd):
 
         # commands
 
-    def do_ls(self, line):
+    def disabled_do_ls(self, line):
         """
         See list
         """
@@ -387,8 +465,11 @@ class GatewayCliCommands(cmd.Cmd):
         )
         self.request_queue.put(message)
         response = self.wait_for_answer(gateway_device_id, message)
-        if response.res == GatewayResultCode.GW_RES_OK:
-            ret = response.configs
+        if response is not None:
+            if response.res == GatewayResultCode.GW_RES_OK:
+                ret = response.configs
+            else:
+                pass
         else:
             pass
         return ret
@@ -406,11 +487,13 @@ class GatewayCliCommands(cmd.Cmd):
 
     def _lookup_node_address(self, gateway_device_id, sink_id):
         ret = None
-        gwConfig = self._get_gateway_configuration(gateway_device_id)
-        if gwConfig is not None:
-            sinkConfig = self._filter_gateway_configuration(gwConfig, sink_id)
-            if sinkConfig is not None:
-                ret = sinkConfig["node_address"]
+        gw_config = self._get_gateway_configuration(gateway_device_id)
+        if gw_config is not None:
+            sink_config = self._filter_gateway_configuration(
+                gw_config, sink_id
+            )
+            if sink_config is not None:
+                ret = sink_config["node_address"]
         return ret
 
     def do_set_sink(self, line):
@@ -487,7 +570,7 @@ class GatewayCliCommands(cmd.Cmd):
             gateways = list()
 
         gateways = self._sort_items_by_device_id(gateways)
-        online_gateways = self._filter_online_gateways(gateways)
+        online_gateways = self.__filter_online_gateways(gateways)
 
         custom_index = len(online_gateways)
         print("Listing current online gateways:")
@@ -523,24 +606,33 @@ class GatewayCliCommands(cmd.Cmd):
             clear_offline_gateways
         """
 
+        offline_gws: int = 0
         gateways = list(self.device_manager.gateways)
         for gateway in gateways:
+
             if gateway.state.value == GatewayState.OFFLINE.value:
                 message = self.mqtt_topics.event_message(
                     "clear", **dict(gw_id=gateway.device_id)
                 )
+
                 message["data"].Clear()
                 message["data"] = message["data"].SerializeToString()
                 message["retain"] = True
 
                 print("sending clear for gateway {}".format(message))
 
-                # remove from state
-                self.device_manager.remove(gateway.device_id)
-                self.notify()
-
                 self.request_queue.put(message)
-                continue
+                offline_gws += 1
+
+                # remove from state
+                if gateway.device_id in self.device_manager.gateways:
+                    self.device_manager.remove(gateway.device_id)
+                    self.notify()
+
+        if offline_gws > 0:
+            print("Command ok. Offline GW count was {}.".format(offline_gws))
+        else:
+            print("Command ok. No action needed.")
 
     def do_sinks(self, line):
         """
@@ -575,7 +667,6 @@ class GatewayCliCommands(cmd.Cmd):
             sinks_str = ""
             for sink in sorted_sink_list:
                 sinks_str += "{} ".format(sink.device_id)
-                print(sink)
 
             sinks_str = sinks_str[:-1]
 
@@ -748,10 +839,8 @@ class GatewayCliCommands(cmd.Cmd):
             gateway_configuration
 
         Returns:
-            Current configuration for each gateway
+            Prints configurations to console.
         """
-
-        ret = list()
 
         for gateway in self.device_manager.gateways:
 
@@ -764,14 +853,88 @@ class GatewayCliCommands(cmd.Cmd):
 
             gw_id = gateway.device_id
 
-            print("requesting configuration for {}".format(gw_id))
+            print(
+                "\nRequesting configuration for gateway '{}'..\n".format(gw_id)
+            )
             configurations = self._get_gateway_configuration(gateway.device_id)
 
-            for config in configurations:
-                if config is not None:
-                    ret.append(config)
+            if configurations is not None:
+                for config in configurations:
+                    if config is not None:
+                        print(
+                            self._format_gateway_configuration_to_string(
+                                config
+                            )
+                        )
 
-            # Todo check what return type is needed and return needed item.
+    def _format_gateway_configuration_to_string(self, config: object) -> str:
+        ret: str = ""
+        justA: int = 24
+        justF: int = 24
+        ret += "Sink:".ljust(justF)
+        ret += "id: {}".format(config["sink_id"]).ljust(justA)
+        ret += "nw address: {}".format(config["network_address"]).ljust(justA)
+        ret += "nw channel: {}".format(config["network_channel"]).ljust(justA)
+        ret += "\n"
+
+        ret += "Node:".ljust(justF)
+        ret += "address: {}".format(config["node_address"]).ljust(justA)
+        ret += "role: {}".format(config["node_role"]).ljust(justA)
+        ret += "\n"
+
+        ret += "App config:".ljust(justF)
+        ret += "diag: {}".format(config["app_config_diag"]).ljust(justA)
+        ret += "seq: {}".format(config["app_config_seq"]).ljust(justA)
+        ret += "\n"
+        ret += "App config data:".ljust(justF) + "{}".format(
+            (config["app_config_data"].hex())
+        ).ljust(justA)
+        ret += " ({} bytes)".format(len(config["app_config_data"]))
+        ret += "\n"
+        ret += "App config max size:".ljust(justF) + "{}".format(
+            config["app_config_max_size"]
+        ).ljust(justA)
+        ret += "\n"
+
+        ret += "Stack:".ljust(justF)
+        if config["started"] is True:
+            ret += "started: {}".format("yes").ljust(justA)
+        else:
+            ret += "started: {}".format("no").ljust(justA)
+        ret += "profile: {}".format(config["stack_profile"]).ljust(justA)
+        ret += "max mtu: {}".format(config["max_mtu"]).ljust(justA)
+        ret += "min channel: {}".format(config["min_ch"]).ljust(justA)
+        ret += "max channel: {}".format(config["max_ch"]).ljust(justA)
+        ret += "\n"
+
+        ret += "Access cycle:".ljust(justF)
+        ret += "curr range min: {}".format(
+            config["current_ac_range_min"]
+        ).ljust(justA)
+        ret += "curr range max: {}".format(
+            config["current_ac_range_max"]
+        ).ljust(justA)
+        ret += "min value: {}".format(config["min_ac"]).ljust(justA)
+        ret += "max value: {}".format(config["max_ac"]).ljust(justA)
+        ret += "\n"
+
+        ret += "HW:".ljust(justF)
+        ret += "magic: {}".format(config["hw_magic"]).ljust(justA)
+        fw_str: str = ""
+        for x in config["firmware_version"]:
+            fw_str += "{}.".format(x)
+        fw_str = fw_str[:-1]
+        ret += "firmware: {}".format(fw_str).ljust(justA)
+        ret += "\n"
+
+        ret += "Security:".ljust(justF)
+        if config["are_keys_set"] is True:
+            ret += "keys set: {}".format("yes").ljust(justA)
+        else:
+            ret += "keys set: {}".format("no").ljust(justA)
+        ret += "\n"
+
+        return ret
 
     def _refresh_device_manager(self):
         # refresh device manager (gw, sinks) by requesting configurations from
@@ -791,6 +954,14 @@ class GatewayCliCommands(cmd.Cmd):
             config = self._get_gateway_configuration(gateway.device_id)
             self.device_manager.update(gw_id, config)
 
+    @staticmethod
+    def __is_hex(s):
+        try:
+            bytes.fromhex(s)
+            return True
+        except ValueError:
+            return False
+
     def do_set_app_config(self, line):
         """
         Builds and sends an app config message
@@ -799,16 +970,16 @@ class GatewayCliCommands(cmd.Cmd):
             set_app_config  argument=value
 
         Arguments:
-            - sequence=1  # the sequence number - must be higher than the current one
-            - data=001100 # payloady in hex string or plain string
-            - interval=60 # a valid diagnostic interval (by default 60)
+            - app_config_seq=1  # the sequence number - must be higher than the current one.
+            - app_config_data=001100 # payload in hex string or plain string.
+            - app_config_diag=60 # a valid diagnostic interval (by default 60).
 
         Returns:
-            Result of the request and app config currently set
+            Prints result of the request to console.
         """
         options = dict(
             app_config_seq=dict(type=int, default=None),
-            app_config_data=dict(type=int, default=None),
+            app_config_data=dict(type=str, default=None),
             app_config_diag=dict(type=int, default=60),
         )
 
@@ -820,39 +991,969 @@ class GatewayCliCommands(cmd.Cmd):
             gateway_id = self.gateway.device_id
             sink_id = self.sink.device_id
 
-            if not self.is_valid(args) or not sink_id:
-                self.do_help("set_app_config", args)
+            if self.is_valid(args) is True:
+                app_config_str = args["app_config_data"]
+                if self.__is_hex(app_config_str) is True:
+                    if sink_id:
+                        payload = bytes.fromhex(app_config_str)
+                        message = self.mqtt_topics.request_message(
+                            "set_config",
+                            **dict(
+                                sink_id=sink_id,
+                                gw_id=gateway_id,
+                                new_config={
+                                    "app_config_diag": args["app_config_diag"],
+                                    "app_config_data": payload,
+                                    "app_config_seq": args["app_config_seq"],
+                                },
+                            ),
+                        )
+                        timeout_sec: int = 30
+                        print(
+                            "Args ok. Sending request and waiting response "
+                            "up to {} secs..".format(timeout_sec)
+                        )
 
+                        self.request_queue.put(message)
+                        response_sink = self.wait_for_answer(
+                            gateway_id, message, timeout_sec
+                        )
+                        if response_sink is not None:
+                            if (
+                                response_sink.res
+                                == GatewayResultCode.GW_RES_OK
+                            ):
+                                print("Command Ok.")
+                            elif (
+                                response_sink.res
+                                == GatewayResultCode.GW_RES_INVLAID_SEQUENCE_NUMBER
+                            ):
+                                print(
+                                    "Command FAIL. Invalid sequence number. "
+                                    "Use 'gateway_configuration' "
+                                    "cmd check current one."
+                                )
+                            else:
+                                print(
+                                    "Command FAIL. Response was {}.".format(
+                                        response_sink.res
+                                    )
+                                )
+                        else:
+                            print("Command FAIL. Response was empty.")
+                    else:
+                        print("Command FAIL. Sink not set.")
+                else:
+                    print(
+                        "Command FAIL. Arguments not ok. Check app config data parameter."
+                    )
+            else:
+                print("Command FAIL. Arguments not ok.")
+        else:
+            print("Command FAIL. Set sink first.")
+
+    @staticmethod
+    def __print_scratch_pad_response(response) -> None:
+
+        """
+        UI spec
+        Stored scratchpad:
+        seq	    : 1
+        len	    : 896
+        crc 	: 58114
+        status	: new
+        type	: present
+
+        Processed scratchpad:
+        seq	    : 1
+        crc	    : 36840
+        len	    : 105072
+
+        Firmware:
+        area id : 259
+        """
+        text_field_len: int = 8
+        sep_str: str = ": "
+        hex_formatter_str: str = "02x"
+        print("")
+
+        print("Stored scratchpad:")
+        print(
+            "seq".ljust(text_field_len)
+            + sep_str
+            + "{}".format(response.stored_scratchpad["seq"])
+        )
+        print(
+            "len".ljust(text_field_len)
+            + sep_str
+            + "{}".format(response.stored_scratchpad["len"])
+        )
+        print(
+            "crc".ljust(text_field_len)
+            + sep_str
+            + "0x{}".format(
+                format(
+                    int(response.stored_scratchpad["crc"]), hex_formatter_str
+                )
+            )
+        )
+        print(
+            "status".ljust(text_field_len)
+            + sep_str
+            + "{}".format(response.stored_status)
+        )
+        print(
+            "type".ljust(text_field_len)
+            + sep_str
+            + "{}".format(response.stored_type)
+        )
+        print("")
+
+        print("Processed scratchpad:")
+        print(
+            "seq".ljust(text_field_len)
+            + sep_str
+            + "{}".format(response.processed_scratchpad["seq"])
+        )
+        print(
+            "len".ljust(text_field_len)
+            + sep_str
+            + "{}".format(response.processed_scratchpad["len"])
+        )
+        print(
+            "crc".ljust(text_field_len)
+            + sep_str
+            + "0x{}".format(
+                format(
+                    int(response.processed_scratchpad["crc"]),
+                    hex_formatter_str,
+                )
+            )
+        )
+        print("")
+
+        print("Firmware:")
+        print(
+            "area id".ljust(text_field_len)
+            + sep_str
+            + "0x{}".format(
+                format(int(response.firmware_area_id), hex_formatter_str)
+            )
+        )
+        print("")
+
+    def do_scratchpad_check_all(self, line) -> None:
+        """
+        Checks nodes scratchpad status connected to current selected sink.
+        Returns also sink values.
+
+        Usage:
+            scratchpad_check_all
+
+        Returns:
+            Prints status of nodes behind selected sink to console.
+        """
+        if self.gateway and self.sink:
+            pass
+        else:
+            print("Command FAIL. Set sink first")
+            return
+
+        if self.gateway and self.sink:
+            gateway_id = self.gateway.device_id
+            sink_id = self.sink.device_id
+
+            node_address = address_broadcast
+
+            sink_node_address = self._lookup_node_address(gateway_id, sink_id)
+
+            # Send scratchpad status to each nodes in network (use broadcast).
+            broad_cast_message = self.create_scratchpad_status_query_msg(
+                gateway_id, node_address, sink_id
+            )
+            sink_message = self.create_scratchpad_status_query_msg(
+                gateway_id, sink_node_address, sink_id
+            )
+
+            self.request_queue.put(broad_cast_message)
+            self.request_queue.put(sink_message)
+
+            processed_scratchpads: dict = dict()
+            stored_scratchpads: dict = dict()
+            node_statuses: dict = dict()
+            header_printed: bool = False
+
+            response_bcast = self.wait_for_answer(
+                gateway_id, broad_cast_message
+            )
+
+            response_sink = self.wait_for_answer(gateway_id, sink_message)
+            if response_bcast is not None and response_sink is not None:
+                if (
+                    response_bcast.res == GatewayResultCode.GW_RES_OK
+                    and response_sink.res == GatewayResultCode.GW_RES_OK
+                ):
+                    silence_time_sec: int = 10
+                    print(
+                        "Commands OK. Collecting answers. Silence time "
+                        "threshold is {} secs.".format(silence_time_sec)
+                    )
+
+                    print("")
+                    print("Nodes info in order of appearance ----------------")
+
+                    # Collect responses. Collect responses until there is at
+                    # silence_time_sec silence.
+
+                    last_msg_received_time = perf_counter()
+                    while (
+                        perf_counter() - last_msg_received_time
+                        < silence_time_sec
+                    ):
+                        data_msgs = self.get_messages_from_data_queue()
+                        if data_msgs is not None:
+                            for data_msg in data_msgs:
+                                if (
+                                    self.__scratchpad_check_all_handle_message(
+                                        data_msg,
+                                        header_printed,
+                                        node_statuses,
+                                        processed_scratchpads,
+                                        stored_scratchpads,
+                                    )
+                                    is True
+                                ):
+                                    last_msg_received_time = perf_counter()
+                                    header_printed = True
+                        else:
+                            default_sleep_time: float = 0.1
+                            sleep(default_sleep_time)
+
+                    # Calculate result
+                    # Print result to console
+                    print("")
+                    print("Nodes info in sorted order -----------------------")
+                    print("")
+                    for key in sorted(node_statuses):
+                        print(node_statuses[key])
+
+                    self.__print_dict_key_ratios(
+                        processed_scratchpads, "Processed"
+                    )
+                    self.__print_dict_key_ratios(stored_scratchpads, "Stored")
+
+                    print("")
+                    print("--")
+
+                    if len(stored_scratchpads) == 1:
+
+                        first_key: str = list(stored_scratchpads.keys())[0]
+                        print(
+                            "All nodes of network has firmware '{}' stored.".format(
+                                first_key
+                            )
+                        )
+
+                    else:
+                        print("More than one firmware detected. ")
+                else:
+                    print(
+                        "Command FAIL broadcast cmd status:[{}] sink "
+                        "cmd status:[{}]".format(
+                            response_bcast.res, response_sink.res
+                        )
+                    )
+            else:
+                print("Command FAIL due timeout.")
+
+        else:
+            print("Command FAIL. Set sink first")
+        print("")
+
+    def __scratchpad_check_all_handle_message(
+        self,
+        msg,
+        header_is_printed: bool,
+        node_statuses=None,
+        processed_scratchpads=None,
+        stored_scratchpads=None,
+    ) -> bool:
+        ret = False
+        if msg.source_endpoint == end_point_default_diagnostic_control:
+            otap_status: MsapScratchPadStatusResp = MsapScratchPadStatusResp(
+                msg.data_payload
+            )
+
+            if otap_status.is_valid():
+                address_just_size: int = 18
+                stored_seq_just_size: int = 12
+                crc_just_size: int = 12
+                stack_proc_seq_just_size: int = 16
+                stack_version_just_size: int = 11
+                app_proc_sec_just_size: int = 14
+                app_version_just_size: int = 11
+                fw_aread_id_just_size: int = 24
+                app_aread_id_just_size: int = 24
+
+                if header_is_printed is False:
+                    headerStr: str = addFieldFormatterToStr(
+                        "Address", address_just_size
+                    )
+                    headerStr += addFieldFormatterToStr(
+                        "Stored seq", stored_seq_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "Stored crc", crc_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "Stack proc seq", stack_proc_seq_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "Proc crc", crc_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "Stack SW", stack_version_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "Proc firmware area id", fw_aread_id_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "App proc seq", app_proc_sec_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "App SW", app_version_just_size
+                    )
+
+                    headerStr += addFieldFormatterToStr(
+                        "Proc application area id", app_aread_id_just_size
+                    )
+
+                    print("")
+                    print(headerStr)
+
+                valuesStr: str = addFieldFormatterToStr(
+                    msg.source_address, address_just_size
+                )
+                valuesStr += addFieldFormatterToStr(
+                    otap_status.storedScratchSeq[0], stored_seq_just_size
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    hex(otap_status.storedScratchPadCRC), crc_just_size
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    otap_status.processedScratchPadSeq[0],
+                    stack_proc_seq_just_size,
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    hex(otap_status.processedScratchPadCRC), crc_just_size
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    getStackSwVersionStr(otap_status), stack_version_just_size
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    hex(otap_status.processedFirmwareAreaId),
+                    fw_aread_id_just_size,
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    otap_status.applicationProcessedScratchPadSeq[0],
+                    app_proc_sec_just_size,
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    getAppSwVersionStr(otap_status), app_version_just_size
+                )
+
+                valuesStr += addFieldFormatterToStr(
+                    hex(otap_status.processedApplicationAreaId),
+                    app_aread_id_just_size,
+                )
+
+                node_statuses[msg.source_address] = valuesStr
+
+                print(valuesStr)
+
+                seq_field_len: int = 3
+
+                processed_key = (
+                    "CRC: {} Stack SW: {} stack proc seq:{}"
+                    " App SW: {} app proc seq:{}".format(
+                        hex(otap_status.processedScratchPadCRC),
+                        getStackSwVersionStr(otap_status),
+                        addFieldFormatterToStr(
+                            otap_status.processedScratchPadSeq[0],
+                            seq_field_len,
+                        ),
+                        getAppSwVersionStr(otap_status),
+                        addFieldFormatterToStr(
+                            otap_status.applicationProcessedScratchPadSeq[0],
+                            seq_field_len,
+                        ),
+                    )
+                )
+
+                stored_key = (
+                    "CRC: {} Stack SW: {} stack stored seq:"
+                    "{}".format(
+                        hex(otap_status.storedScratchPadCRC),
+                        getStackSwVersionStr(otap_status),
+                        addFieldFormatterToStr(
+                            otap_status.storedScratchSeq[0], seq_field_len
+                        ),
+                    )
+                )
+
+                if processed_key not in processed_scratchpads:
+                    processed_scratchpads[processed_key] = 1
+                else:
+                    processed_scratchpads[processed_key] += 1
+
+                if stored_key not in stored_scratchpads:
+                    stored_scratchpads[stored_key] = 1
+                else:
+                    stored_scratchpads[stored_key] += 1
+                ret = True
+        return ret
+
+    def __print_dict_key_ratios(self, itemsDict: dict, dictName: str) -> None:
+        key_len: int = 80
+        print("")
+        print("{} stats".format(dictName))
+        if len(itemsDict) > 0:
+            value_sum: int = 0
+            for val in itemsDict.values():
+                value_sum += val
+
+            for key in itemsDict:
+                a = "{}".format(key)
+                node_count_field_width: int = 4
+                print(
+                    a.ljust(key_len)
+                    + " running on {} node(s) ".format(
+                        str(itemsDict[key]).ljust(node_count_field_width)
+                    )
+                    + "({}%)".format(int((itemsDict[key] / value_sum) * 100))
+                )
+            print("Total {} nodes".format(value_sum))
+        else:
+            print("{} has no items")
+
+    def create_scratchpad_status_query_msg(
+        self, gateway_id, node_address, sink_id
+    ) -> object:
+
+        req: MsapScratchPadStatusReq = MsapScratchPadStatusReq()
+
+        message = self.mqtt_topics.request_message(
+            "send_data",
+            **dict(
+                sink_id=sink_id,
+                gw_id=gateway_id,
+                dest_add=node_address,
+                src_ep=end_point_this_source,
+                dst_ep=end_point_default_diagnostic_control,
+                qos=1,
+                payload=req.toBytes(),
+            ),
+        )
+        message["qos"] = MQTTqosOptions.exactly_once.value
+        return message
+
+    def create_scratchpad_msap_update_msg(
+        self, gateway_id, node_address, sink_id, seq_number: int
+    ) -> object:
+
+        message: object = None
+
+        req: MsapScratchpadUpdateReq = MsapScratchpadUpdateReq()
+        if req.setScrSequence(seq_number):
+            if req.is_valid():
+                message = self.mqtt_topics.request_message(
+                    "send_data",
+                    **dict(
+                        sink_id=sink_id,
+                        gw_id=gateway_id,
+                        dest_add=node_address,
+                        src_ep=end_point_this_source,
+                        dst_ep=end_point_default_diagnostic_control,
+                        qos=1,
+                        payload=req.toBytes(),
+                    ),
+                )
+                message["qos"] = MQTTqosOptions.exactly_once.value
+        return message
+
+    def create_msap_cancel_msg(self, gateway_id, node_address, sink_id):
+        message: object = None
+
+        req: MsapCancelReq = MsapCancelReq()
+        if req.is_valid():
             message = self.mqtt_topics.request_message(
-                "set_config",
+                "send_data",
                 **dict(
                     sink_id=sink_id,
                     gw_id=gateway_id,
-                    new_config={
-                        "app_config_diag": args["app_config_diag"],
-                        "app_config_data": args["app_config_data"],
-                        "app_config_seq": args["app_config_seq"],
-                    },
+                    dest_add=node_address,
+                    src_ep=end_point_this_source,
+                    dst_ep=end_point_default_diagnostic_control,
+                    qos=1,
+                    payload=req.toBytes(),
                 ),
             )
+            message["qos"] = MQTTqosOptions.exactly_once.value
+        return message
 
-            self.request_queue.put(message)
-            self.wait_for_answer(gateway_id, message)
+    def create_msap_update_msg(
+        self, gateway_id, node_address, sink_id, countdown_secs: int
+    ) -> object:
 
+        message: object = None
+
+        req: MsapUpdateReq = MsapUpdateReq()
+        if req.setCountDown(countdown_secs):
+            if req.is_valid():
+                message = self.mqtt_topics.request_message(
+                    "send_data",
+                    **dict(
+                        sink_id=sink_id,
+                        gw_id=gateway_id,
+                        dest_add=node_address,
+                        src_ep=end_point_this_source,
+                        dst_ep=end_point_default_diagnostic_control,
+                        qos=1,
+                        payload=req.toBytes(),
+                    ),
+                )
+                message["qos"] = MQTTqosOptions.exactly_once.value
+        return message
+
+    def create_msap_ping_msg(
+        self, gateway_id, node_address, sink_id
+    ) -> object:
+
+        message: object = None
+
+        req: MsapPingReq = MsapPingReq()
+        if req.is_valid():
+            message = self.mqtt_topics.request_message(
+                "send_data",
+                **dict(
+                    sink_id=sink_id,
+                    gw_id=gateway_id,
+                    dest_add=node_address,
+                    src_ep=end_point_this_source,
+                    dst_ep=end_point_default_diagnostic_control,
+                    qos=1,
+                    payload=req.toBytes(),
+                ),
+            )
+            message["qos"] = MQTTqosOptions.exactly_once.value
+
+        return message, req.getReference()
+
+    def create_msap_combo_msg(
+        self,
+        gateway_id,
+        node_address,
+        sink_id,
+        countdown_secs: int,
+        seq_number: int,
+    ) -> object:
+
+        # Creates packed combo message where is
+        # cancel + begin + scratchpad_update + end + update
+
+        message: object = None
+
+        cancel_op = MsapCancelReq()
+        begin_op = MsapBeginReq()
+        sc_update_op = MsapScratchpadUpdateReq()
+        sc_update_op.setScrSequence(seq_number)
+
+        end_op = MsapEndReq()
+        update_op = MsapUpdateReq()
+        update_op.setCountDown(countdown_secs)
+
+        if (
+            begin_op.is_valid()
+            and cancel_op.is_valid()
+            and sc_update_op.is_valid()
+            and end_op.is_valid()
+            and update_op.is_valid()
+        ):
+
+            combo_payload: bytes = cancel_op.toBytes() + begin_op.toBytes() + sc_update_op.toBytes() + end_op.toBytes() + update_op.toBytes()
+
+            if len(combo_payload) < maxPacketSizeBytes:
+                message = self.mqtt_topics.request_message(
+                    "send_data",
+                    **dict(
+                        sink_id=sink_id,
+                        gw_id=gateway_id,
+                        dest_add=node_address,
+                        src_ep=end_point_this_source,
+                        dst_ep=end_point_default_diagnostic_control,
+                        qos=1,
+                        payload=combo_payload,
+                    ),
+                )
+                message["qos"] = MQTTqosOptions.exactly_once.value
+        else:
+            raise ValueError("Parameters for create_msap_combo_msg not ok.")
+        return message
+
+    def do_scratchpad_update_only_nodes(self, line) -> None:
+        """
+        Asks nodes behind sink to take scratchpad into into use.
+        Performs command MSAP_UPDATE (0x05 (WP-RM-117))
+
+        Usage:
+            scratchpad_update_only_nodes <sequence id>.
+
+        Returns:
+            Prints stats of responded nodes to console
+        """
+
+        # Validate arg
+        update_seq_id: int = 0
+
+        args = line.split(" ")
+
+        if len(args) == 1:
+            try:
+                update_seq_id = int(args[0])
+                if 0 <= update_seq_id <= 255:
+                    pass
+                else:
+                    raise ValueError("Seq id not withing limits.")
+            except:
+                # did not work.
+                update_seq_id = -1
+
+        if update_seq_id >= 0:
+
+            if self.gateway and self.sink:
+                pass
+            else:
+                print("Command FAIL. Set sink first")
+                return
+
+            if self.gateway and self.sink:
+                gateway_id = self.gateway.device_id
+                sink_id = self.sink.device_id
+
+                node_address = address_broadcast
+                # Send scratchpad status to each nodes in network (use
+                # broadcast).
+                default_countdown_secs: int = 30
+                print(
+                    "Using {} secs as node update countdown time.".format(
+                        default_countdown_secs
+                    )
+                )
+                broadcast_message = self.create_msap_combo_msg(
+                    gateway_id,
+                    node_address,
+                    sink_id,
+                    default_countdown_secs,
+                    update_seq_id,
+                )
+
+                if broadcast_message is not None:
+                    self.request_queue.put(broadcast_message)
+                    responded_nodes_ok: dict = dict()
+
+                    response_bcast = self.wait_for_answer(
+                        gateway_id, broadcast_message
+                    )
+
+                    if response_bcast is not None:
+                        if response_bcast.res == GatewayResultCode.GW_RES_OK:
+                            silence_time_sec: int = default_countdown_secs * 2
+                            print(
+                                "Command OK. Collecting nodes answers. Silence "
+                                "time threshold is {} secs.".format(
+                                    silence_time_sec
+                                )
+                            )
+
+                            # Collect responses. Collect responses until
+                            # there is at silence_time_sec silence.
+
+                            # Poll results
+                            last_msg_received_time = perf_counter()
+                            while (
+                                perf_counter() - last_msg_received_time
+                                < silence_time_sec
+                            ):
+                                data_msgs = self.get_messages_from_data_queue()
+
+                                if data_msgs is not None:
+                                    for data_msg in data_msgs:
+                                        if data_msg is not None:
+                                            if (
+                                                self.__scratchpad_update_only_nodes_h(
+                                                    data_msg,
+                                                    responded_nodes_ok,
+                                                )
+                                                is True
+                                            ):
+                                                last_msg_received_time = (
+                                                    perf_counter()
+                                                )
+
+                                else:
+                                    default_sleep_time: float = 0.1
+                                    sleep(default_sleep_time)
+
+                            # Calculate result
+                            # Print result to console
+                            print(
+                                "Ok response received from {} node(s).".format(
+                                    len(responded_nodes_ok)
+                                )
+                            )
+
+                        else:
+                            print(
+                                "Command FAIL [{}]".format(response_bcast.res)
+                            )
+                    else:
+                        print("Command FAIL due timeout.")
+
+            else:
+                print("Command FAIL due invalid gw or sink selection.")
+            print("")
+        else:
+            print("Command FAIL due invalid seq id.")
+
+    def __scratchpad_update_only_nodes_h(
+        self, msg, responded_nodes_ok=None
+    ) -> bool:
+        ret = False
+
+        if msg.source_endpoint == end_point_default_diagnostic_control:
+
+            # We are excepting combo message that has
+            # MSAP cancel, begin, sc update, end, update
+            # Parse responses accordingly.
+            if self.parseMsapUpdateComboResponses(msg.data_payload):
+                if msg.source_address not in responded_nodes_ok:
+                    responded_nodes_ok[msg.source_address] = 1
+                else:
+                    responded_nodes_ok[msg.source_address] += 1
+                ret = True
+            else:
+                print("Node {} responded nok".format(msg.source_address))
+
+        return ret
+
+    @staticmethod
+    def parseMsapUpdateComboResponses(payload: bytes) -> bool:
+        ret: bool = True
+        read_pos: int = 0
+        header_len: int = 2
+        all_msgs_ok: bool = True
+
+        while read_pos <= len(payload) - header_len:
+
+            data_len = int(payload[read_pos + 1])
+            msg_data = payload[read_pos : read_pos + header_len + data_len]
+            if len(msg_data) == data_len + header_len:
+                pass
+            else:
+                print("invalid message. Lengths do not match!")
+                all_msgs_ok = False
+                break
+
+            msg_type: int = int(msg_data[0])
+            if msg_type == MsapCancelResp.getType():
+                if MsapCancelResp(msg_data).is_valid():
+                    pass
+                else:
+                    print("cancel nok")
+                    all_msgs_ok = False
+                    break
+            elif msg_type == MsapBeginResp.getType():
+                if MsapBeginResp(msg_data).is_valid():
+                    pass
+                else:
+                    print("begin nok")
+                    all_msgs_ok = False
+                    break
+            elif msg_type == MsapScratchpadUpdateResp.getType():
+                if MsapScratchpadUpdateResp(msg_data).is_valid():
+                    pass
+                else:
+                    print("sc update nok")
+                    all_msgs_ok = False
+                    break
+            elif msg_type == MsapEndResp.getType():
+                if MsapEndResp(msg_data).is_valid():
+                    pass
+                else:
+                    print("end nok")
+                    all_msgs_ok = False
+                    break
+            elif msg_type == MsapUpdateResp.getType():
+                if MsapUpdateResp(msg_data).is_valid():
+                    pass
+                else:
+                    all_msgs_ok = False
+                    break
+            else:
+                all_msgs_ok = False
+                break
+
+            read_pos += header_len + data_len
+
+        if all_msgs_ok:
+            ret = True
+        else:
+            ret = False
+        return ret
+
+    def do_send_msap_cancel(self, line: str) -> None:
+        """
+        Sends cancel message to nodes using broadcast.
+
+        Usage:
+            send_msap_cancel
+
+        Returns:
+            Prints stats of responded nodes to console
+        """
+
+        if self.gateway and self.sink:
+            pass
         else:
             self._set_target()
-            self.do_set_app_config(line)
 
-    def do_scratchpad_status(self, line):
+        if self.gateway and self.sink:
+            gateway_id = self.gateway.device_id
+            sink_id = self.sink.device_id
+
+            node_address = address_broadcast
+            # Send scratchpad status to each nodes in network (use broadcast).
+
+            broadcast_message = self.create_msap_cancel_msg(
+                gateway_id, node_address, sink_id
+            )
+
+            if broadcast_message is not None:
+                self.request_queue.put(broadcast_message)
+                responded_nodes_ok: dict = dict()
+
+                response_bcast = self.wait_for_answer(
+                    gateway_id, broadcast_message
+                )
+
+                if response_bcast is not None:
+                    if response_bcast.res == GatewayResultCode.GW_RES_OK:
+                        silence_time_sec: int = 10
+                        print(
+                            "Command OK. Collecting nodes answers. Silence "
+                            "time threshold is {} secs.".format(
+                                silence_time_sec
+                            )
+                        )
+
+                        # Collect responses. Collect responses until
+                        # there is at least silence_time_sec silence.
+
+                        def __sc_handle_msap_cancel_message(msg) -> bool:
+                            ret = False
+
+                            if (
+                                msg.source_endpoint
+                                == end_point_default_diagnostic_control
+                            ):
+
+                                msap_cancel_resp: MsapCancelResp = MsapCancelResp(
+                                    msg.data_payload
+                                )
+
+                                if msap_cancel_resp.is_valid():
+                                    if (
+                                        msg.source_address
+                                        not in responded_nodes_ok
+                                    ):
+                                        responded_nodes_ok[
+                                            msg.source_address
+                                        ] = 1
+                                    else:
+                                        responded_nodes_ok[
+                                            msg.source_address
+                                        ] += 1
+                                    ret = True
+                            return ret
+
+                        # Poll results
+                        last_msg_received_time = perf_counter()
+                        while (
+                            perf_counter() - last_msg_received_time
+                            < silence_time_sec
+                        ):
+                            data_msgs = self.get_messages_from_data_queue()
+
+                            for data_msg in data_msgs:
+                                if data_msg is not None:
+                                    if (
+                                        __sc_handle_msap_cancel_message(
+                                            data_msg
+                                        )
+                                        is True
+                                    ):
+                                        last_msg_received_time = perf_counter()
+
+                            if data_msgs is None:
+                                default_sleep_time: float = 0.1
+                                sleep(default_sleep_time)
+
+                        # Calculate result
+                        # Print result to console
+                        print(
+                            "Ok response received from {} node(s).".format(
+                                len(responded_nodes_ok)
+                            )
+                        )
+
+                    else:
+                        print("Command FAIL [{}]".format(response_bcast.res))
+                else:
+                    print("Command FAIL due timeout.")
+        else:
+            print("Command FAIL due invalid gw or sink selection.")
+        print("")
+
+    def do_scratchpad_check_sink(self, line) -> None:
         """
         Retrieves the scratchpad status from the sink
 
         Usage:
-            scratchpad_status
+            scratchpad_check_sink
 
         Returns:
-            The scratchpad loaded on the target gateway:sink pair
+            None
         """
+
+        if self.gateway and self.sink:
+            pass
+        else:
+            print("Command FAIL. Set sink first")
+            return
 
         if self.gateway and self.sink:
             gateway_id = self.gateway.device_id
@@ -862,22 +1963,38 @@ class GatewayCliCommands(cmd.Cmd):
                 "otap_status", **dict(sink_id=sink_id, gw_id=gateway_id)
             )
 
+            print("Performing upload. Request sent.")
             self.request_queue.put(message)
-            self.wait_for_answer(gateway_id, message)
 
+            print("Waiting response.")
+            response = self.wait_for_answer(gateway_id, message)
+
+            if response is not None:
+                if response.res == GatewayResultCode.GW_RES_OK:
+                    print("Command OK.")
+                    self.__print_scratch_pad_response(response)
+                else:
+                    print("Command FAIL [{}]".format(response.res))
+            else:
+                print("Command FAIL due timeout.")
         else:
-            self._set_target()
+            print("Command FAIL due invalid gw or sink selection.")
 
-    def do_scratchpad_update(self, line):
+    def do_scratchpad_update_only_sink(self, line) -> None:
         """
         Sends a scratchpad update command to the sink
 
         Usage:
-            scratchpad_update
+            scratchpad_update_only_sink
 
         Returns:
-            The update status
+            None
         """
+        if self.gateway and self.sink:
+            pass
+        else:
+            print("Command FAIL. Set sink first")
+            return
 
         if self.gateway and self.sink:
             gateway_id = self.gateway.device_id
@@ -888,66 +2005,126 @@ class GatewayCliCommands(cmd.Cmd):
                 **dict(sink_id=sink_id, gw_id=gateway_id),
             )
 
-            message["qos"] = MQTT_QOS_options.exactly_once.value
+            message["qos"] = MQTTqosOptions.exactly_once.value
 
+            print("Performing update. Request sent.")
             self.request_queue.put(message)
-            self.wait_for_answer(gateway_id, message)
+            scratchpad_update_timeout_sec: int = 60
+            print(
+                "Waiting response up to {} sec.".format(
+                    scratchpad_update_timeout_sec
+                )
+            )
+
+            response = self.wait_for_answer(
+                gateway_id, message, scratchpad_update_timeout_sec
+            )
+            if response is not None:
+                if response.res == GatewayResultCode.GW_RES_OK:
+                    print("Command OK.")
+                else:
+                    print("Command FAIL [{}]".format(response.res))
+            else:
+                print("Command FAIL due timeout.")
 
         else:
-            self._set_target()
+            print("Command FAIL due invalid gw or sink selection.")
 
-    def do_scratchpad_upload(self, line):
+    def do_scratchpad_upload_to_sink(self, line) -> None:
         """
         Uploads a scratchpad to the target sink/gateway pair
 
         Usage:
-            scratchpad_upload argument=value
+            scratchpad_upload_sink filepath=<path/to/myscratchpad.otap>  sequence=<n>
 
         Arguments:
             - filepath=~/myscratchpad.otap # the path to the scratchpad
             - sequence=1 # the scratchpad sequence number
 
         Returns:
-            The status of the upload success
+            None
         """
 
+        file_path_arg_str: str = "filepath"
+        sequence_arg_str: str = "sequence"
+        scratchpad_load_cmd_str: str = "otap_load_scratchpad"
+
         options = dict(
-            file_path=dict(type=int, default=None),
-            seq=dict(type=int, default=None),
+            filepath=dict(type=str, default=None),
+            sequence=dict(type=int, default=None),
         )
-
         args = self.retrieve_args(line, options)
+        if (
+            file_path_arg_str in args
+            and sequence_arg_str in args
+            and self.is_valid(args)
+        ):
 
-        if self.gateway and self.sink:
-            gateway_id = self.gateway.device_id
-            sink_id = self.sink.device_id
+            if self.gateway and self.sink:
+                pass
+            else:
+                print("Command FAIL. Set sink first")
+                return
 
-            try:
-                with open(args["file_path"], "rb") as f:
-                    scratchpad = f.read()
-            except FileNotFoundError:
-                scratchpad = None
+            if self.gateway and self.sink:
 
-            if not self.is_valid(args):
-                self.do_help("scratchpad_upload", args)
+                gateway_id = self.gateway.device_id
+                sink_id = self.sink.device_id
 
-            message = self.mqtt_topics.request_message(
-                "otap_load_scratchpad",
-                **dict(
-                    sink_id=sink_id,
-                    scratchpad=scratchpad,
-                    seq=args["seq"],
-                    gw_id=gateway_id,
-                ),
-            )
-            message["qos"] = MQTT_QOS_options.exactly_once.value
+                try:
+                    with open(args[file_path_arg_str], "rb") as f:
+                        scratchpad = f.read()
+                except FileNotFoundError:
+                    print(
+                        "File '{}' not found.".format(args[file_path_arg_str])
+                    )
+                    scratchpad = None
 
-            self.request_queue.put(message)
-            self.wait_for_answer(gateway_id, message)
+                if scratchpad is not None:
+                    message = self.mqtt_topics.request_message(
+                        scratchpad_load_cmd_str,
+                        **dict(
+                            sink_id=sink_id,
+                            scratchpad=scratchpad,
+                            seq=args[sequence_arg_str],
+                            gw_id=gateway_id,
+                        ),
+                    )
+                    message["qos"] = MQTTqosOptions.exactly_once.value
+                    print("Performing upload. Request sent.")
+                    self.request_queue.put(message)
 
+                    scratchpad_upload_timeout_sec: int = 60
+                    print(
+                        "Waiting response up to {} sec.".format(
+                            scratchpad_upload_timeout_sec
+                        )
+                    )
+
+                    response = self.wait_for_answer(
+                        gateway_id,
+                        message,
+                        scratchpad_upload_timeout_sec,
+                        True,
+                    )
+                    if response is not None:
+                        if response.res == GatewayResultCode.GW_RES_OK:
+                            print("Command OK.")
+                        else:
+                            print("Command FAIL [{}]".format(response.res))
+                    else:
+                        print("Command FAIL due timeout.")
+                else:
+                    print(
+                        "Command FAIL. Cannot load scratchpad file from '{}'.".format(
+                            args[file_path_arg_str]
+                        )
+                    )
+            else:
+                print("Command FAIL due invalid gw or sink selection.")
         else:
-            self._set_target()
-            self.scratchpad_upload(line=line)
+            print("Command FAIL. Not all expected arguments given.")
+            self.do_help("scratchpad_upload_to_sink", args)
 
     def _build_default_mqtt_request_options(self):
         options = dict(
@@ -956,7 +2133,7 @@ class GatewayCliCommands(cmd.Cmd):
             destination_address=dict(type=int, default=None),
             payload=dict(type=self.strtobytes, default=None),
             timeout=dict(type=int, default=0),
-            qos=dict(type=int, default=MQTT_QOS_options.exactly_once.value),
+            qos=dict(type=int, default=MQTTqosOptions.exactly_once.value),
             is_unack_csma_ca=dict(type=bool, default=0),
             hop_limit=dict(type=int, default=0),
             initial_delay_ms=dict(type=int, default=0),
@@ -1013,10 +2190,7 @@ class GatewayCliCommands(cmd.Cmd):
                     ),
                 )
 
-                print(message["data"])
-                return
-
-                message["qos"] = MQTT_QOS_options.exactly_once.value
+                message["qos"] = MQTTqosOptions.exactly_once.value
                 self.request_queue.put(message)
                 self.wait_for_answer(gateway_id, message)
         else:
@@ -1043,7 +2217,7 @@ class GatewayCliCommands(cmd.Cmd):
                 src_ep=sourceEndPoint,
                 dst_ep=destinationEndPoint,
                 payload=payload,
-                qos=MQTT_QOS_options.exactly_once.value,
+                qos=MQTTqosOptions.exactly_once.value,
                 is_unack_csma_ca=0,
                 hop_limit=0,
                 initial_delay_ms=0,
@@ -1051,18 +2225,18 @@ class GatewayCliCommands(cmd.Cmd):
             ),
         )
 
-        message["qos"] = MQTT_QOS_options.exactly_once.value
-        requestIdOfMessageToBeSent = message["data"].req_id
+        message["qos"] = MQTTqosOptions.exactly_once.value
+        request_id_of_message_to_be_sent = message["data"].req_id
 
-        dummyMode: bool = False  # If True, no messages is actually sent
+        dummy_mode: bool = False  # If True, no messages is actually sent
 
-        if dummyMode is True:
+        if dummy_mode is True:
             print("Skipping sending ")
         else:
             self.request_queue.put(message)
-        return requestIdOfMessageToBeSent
+        return request_id_of_message_to_be_sent
 
-    def do_set_config(self, line):
+    def do_set_sink_config(self, line):
         """
         Set a config on the target sink.
 
@@ -1076,8 +2250,11 @@ class GatewayCliCommands(cmd.Cmd):
             - network_channel=1 (int)
             - started=True (bool)
 
+            Invalid values are simply ignored. Use gateway_configuration to
+            check that values were actually added.
+
         Returns:
-            Answer or timeout
+            Print command result to console screen.
         """
         options = dict(
             node_role=dict(type=int, default=None),
@@ -1093,34 +2270,49 @@ class GatewayCliCommands(cmd.Cmd):
             sink_id = self.sink.device_id
 
             new_config = {}
-            for key, val in args:
+            for key, val in args.items():
                 if val:
                     new_config[key] = val
 
             if not new_config:
-                self.do_help("set_config", args)
+                print("Command FAIL. Config not valid.")
+            else:
+                message = self.mqtt_topics.request_message(
+                    "set_config",
+                    **dict(
+                        sink_id=sink_id,
+                        gw_id=gateway_id,
+                        new_config=new_config,
+                    ),
+                )
+                self.request_queue.put(message)
+                print(
+                    "Args ok. Sending request and waiting response "
+                    "up to {} secs..".format(self.timeout)
+                )
 
-            message = self.mqtt_topics.request_message(
-                "set_config",
-                **dict(
-                    sink_id=sink_id, gw_id=gateway_id, new_config=new_config
-                ),
-            )
-            self.request_queue.put(message)
-            self.wait_for_answer(
-                f"{gateway_id}/{sink_id}", message, timeout=self.timeout
-            )
+                response = self.wait_for_answer(
+                    gateway_id, message, timeout=self.timeout
+                )
+                if response is not None:
+                    if response.res == GatewayResultCode.GW_RES_OK:
+                        print("Command OK.")
+                    else:
+                        print("Command FAIL [{}]".format(response.res))
+
+                else:
+                    print("Command FAIL. No response received.")
 
         else:
-            self._set_target()
+            print("Command FAIL. Set sink first.")
 
-    def _getMenuOption(self, menuText: str, options: list):
+    def __get_menu_option(self, menu_text: str, options: list):
 
-        minValue = 0
-        maxValue = len(options) - 1
+        min_value = 0
+        max_value = len(options) - 1
 
         print(" ")
-        print(menuText)
+        print(menu_text)
 
         menuId = 0
         for option in options:
@@ -1130,24 +2322,25 @@ class GatewayCliCommands(cmd.Cmd):
         # print(menuText)
         inputStr = ""
         while (
-            self._validateNumericInput(inputStr, minValue, maxValue) is False
+            self.__validate_numeric_input(inputStr, min_value, max_value)
+            is False
         ):
-            inputStr = input("[{}-{}]: ".format(minValue, maxValue)) or 0
+            inputStr = input("[{}-{}]: ".format(min_value, max_value)) or 0
         ret = options[int(inputStr)]
         return ret
 
-    def _validateNumericInput(
-        self, inputStr: str, minValue: int, maxValue: int
+    def __validate_numeric_input(
+        self, input_str: str, min_value: int, max_value: int
     ):
         ret: bool = False
-        if inputStr.isnumeric():
-            inputValue = int(inputStr)
-            if minValue <= inputValue <= maxValue:
+        if input_str.isnumeric():
+            inputValue = int(input_str)
+            if min_value <= inputValue <= max_value:
                 ret = True
 
         return ret
 
-    def _filter_online_gateways(self, gateways):
+    def __filter_online_gateways(self, gateways):
         online_gw_list: list = list()
 
         for gw in gateways:
@@ -1184,23 +2377,23 @@ class GatewayCliCommands(cmd.Cmd):
             key=lambda item: int(item.network_id),
         )
 
-        networkList: list
-        networkList = list()
+        network_list: list
+        network_list = list()
         for nw in sorted_networks:
-            networkList.append(nw.network_id)
+            network_list.append(nw.network_id)
 
-        if len(networkList) > 0:
+        if len(network_list) > 0:
             selectionID: int
-            argNetworkId = self._getMenuOption(
-                "Please enter network to be operated", networkList
+            arg_network_id = self.__get_menu_option(
+                "Please enter network to be operated", network_list
             )
 
-            argDiagnosticIntervalSec: SetDiagnosticsIntervals
-            offOption = "off"
-            diagnosticIntervalSelection = self._getMenuOption(
+            arg_diagnostic_interval_sec: SetDiagnosticsIntervals
+            off_option = "off"
+            diagnostic_interval_selection = self.__get_menu_option(
                 "Select diagnostic interval(s) or off option",
                 [
-                    offOption,
+                    off_option,
                     SetDiagnosticsIntervals.i30.value,
                     SetDiagnosticsIntervals.i60.value,
                     SetDiagnosticsIntervals.i120.value,
@@ -1209,100 +2402,101 @@ class GatewayCliCommands(cmd.Cmd):
                 ],
             )
 
-            if diagnosticIntervalSelection == offOption:
-                argDiagnosticIntervalSec = (
+            if diagnostic_interval_selection == off_option:
+                arg_diagnostic_interval_sec = (
                     SetDiagnosticsIntervals.intervalOff.value
                 )
             else:
-                argDiagnosticIntervalSec = diagnosticIntervalSelection
+                arg_diagnostic_interval_sec = diagnostic_interval_selection
 
-            featureObject = SetDiagnostics(self.device_manager)
+            feature_object = SetDiagnostics(self.device_manager)
 
             if (
-                featureObject.setArguments(
-                    int(argNetworkId), argDiagnosticIntervalSec
+                feature_object.setArguments(
+                    int(arg_network_id), arg_diagnostic_interval_sec
                 )
                 is True
             ):
 
-                targetSinks = featureObject.getSinksBelongingToNetwork(
-                    int(argNetworkId)
+                target_sinks = feature_object.getSinksBelongingToNetwork(
+                    int(arg_network_id)
                 )
 
-                sinksAddressInfo = dict()
+                sinks_address_info = dict()
 
-                sinkAddressCheckOk: bool = True
-                sinkAddressCheckOk = self.createSinkAddressInfo(
-                    sinkAddressCheckOk, sinksAddressInfo, targetSinks
+                sink_address_check_ok: bool = True
+                sink_address_check_ok = self.createSinkAddressInfo(
+                    sink_address_check_ok, sinks_address_info, target_sinks
                 )
 
-                if sinkAddressCheckOk is True:
+                if sink_address_check_ok is True:
                     print(" ")
                     print("About to send messages to:")
-                    targetList = ""
-                    for gw in targetSinks:
-                        for sink in targetSinks[gw]:
-                            targetList += "{}/{}:{}  ".format(
-                                gw, sink, sinksAddressInfo[gw][sink]
+                    target_list = ""
+                    for gw in target_sinks:
+                        for sink in target_sinks[gw]:
+                            target_list += "{}/{}:{}  ".format(
+                                gw, sink, sinks_address_info[gw][sink]
                             )
-                    print(targetList)
+                    print(target_list)
 
-                    uiCommandOptionProceedYes = "yes"
-                    uiCommandOptionoptionProceedNo = "no"
+                    ui_command_option_proceed_yes = "yes"
+                    ui_command_optionoption_proceed_no = "no"
 
-                    proceed = self._getMenuOption(
+                    proceed = self.__get_menu_option(
                         "Args good. Proceed?",
                         [
-                            uiCommandOptionoptionProceedNo,
-                            uiCommandOptionProceedYes,
+                            ui_command_optionoption_proceed_no,
+                            ui_command_option_proceed_yes,
                         ],
                     )
 
-                    if proceed == uiCommandOptionProceedYes:
-                        featureObject.setMQTTmessageSendFunction(
+                    if proceed == ui_command_option_proceed_yes:
+                        feature_object.setMQTTmessageSendFunction(
                             self.send_message_to_mqtt_async
                         )
 
-                        featureObject.setSinksAddressInfo(sinksAddressInfo)
+                        feature_object.setSinksAddressInfo(sinks_address_info)
 
                         self.set_message_handlers(
-                            featureObject.onDataQueueMessage,
-                            featureObject.onEventQueueMessage,
-                            featureObject.onResponseQueueMessage,
+                            feature_object.onDataQueueMessage,
+                            feature_object.onEventQueueMessage,
+                            feature_object.onResponseQueueMessage,
                         )
 
-                        exitWorkers = False
+                        exit_workers = False
 
                         def applicationLoopWorker():
-                            featureObject.performOperation()
-                            nonlocal exitWorkers
-                            exitWorkers = True
+                            feature_object.performOperation()
+                            nonlocal exit_workers
+                            exit_workers = True
 
                         def backEndClientMessageLoopWorker():
                             # Todo Move this to upper level.
                             # Now here because not knowing the
                             # impacts yet.
-                            nonlocal exitWorkers
-                            while exitWorkers is False:
-                                msgReceived = False
+                            nonlocal exit_workers
+                            while exit_workers is False:
+                                msg_received = False
                                 msg = self.get_message_from_response_queue()
                                 if msg is not None:
-                                    msgReceived = True
+                                    msg_received = True
                                     self.on_response_queue_message(msg)
 
-                                msg = self.get_message_from_data_queue()
-                                if msg is not None:
-                                    msgReceived = True
-                                    self.on_data_queue_message(msg)
+                                msgs = self.get_messages_from_data_queue()
+                                if msgs is not None:
+                                    msg_received = True
+                                    for msg in msgs:
+                                        self.on_data_queue_message(msg)
 
                                 msg = self.get_message_from_event_queue()
                                 if msg is not None:
-                                    msgReceived = True
+                                    msg_received = True
                                     self.on_event_queue_message(msg)
 
-                                if msgReceived is False:
-                                    defaultSleepSecs = 0.05
-                                    sleep(defaultSleepSecs)
+                                if msg_received is False:
+                                    default_sleep_secs = 0.05
+                                    sleep(default_sleep_secs)
 
                         t1 = threading.Thread(target=applicationLoopWorker)
                         t2 = threading.Thread(
@@ -1348,3 +2542,192 @@ class GatewayCliCommands(cmd.Cmd):
                     sinkAddressCheckOk = False
                     break
         return sinkAddressCheckOk
+
+    def do_ping(self, line) -> None:
+        """
+        Pings nodes of network. Collects responses and show
+        results on console
+
+        Usage:
+            Ping
+
+        Returns:
+            Prints stats of responded nodes to console
+        """
+
+        if self.gateway and self.sink:
+            pass
+        else:
+            print("Command FAIL. Set sink first")
+            return
+
+        if self.gateway and self.sink:
+            gateway_id = self.gateway.device_id
+            sink_id = self.sink.device_id
+
+            node_address = address_broadcast
+            # Send ping to each nodes in network (use
+            # broadcast).
+            request_ref: bytes
+            broadcast_message, request_ref = self.create_msap_ping_msg(
+                gateway_id, node_address, sink_id
+            )
+
+            if broadcast_message is not None:
+                self.request_queue.put(broadcast_message)
+                responded_nodes_ok: dict = dict()
+                network_hopcount_histo: dict = dict()
+
+                # Add something to make histogram size look kind same for
+                # most cases
+                base_histo_size: int = 20
+                for x in range(base_histo_size):
+                    network_hopcount_histo[x] = 0
+
+                ping_start_time = perf_counter()
+
+                response_bcast = self.wait_for_answer(
+                    gateway_id, broadcast_message
+                )
+
+                if response_bcast is not None:
+                    if response_bcast.res == GatewayResultCode.GW_RES_OK:
+                        silence_time_sec: int = 10
+                        print(
+                            "Command OK. Collecting nodes answers. Silence "
+                            "time threshold is {} secs.".format(
+                                silence_time_sec
+                            )
+                        )
+                        print("")
+
+                        # Collect responses. Collect responses until there is at
+                        # silence_time_sec silence.
+
+                        def __sc_handle_msap_ping_message(
+                            msg,
+                            req_ref: bytes,
+                            ping_start_time_value: perf_counter,
+                        ) -> bool:
+                            ret = False
+
+                            if (
+                                msg.source_endpoint
+                                == end_point_default_diagnostic_control
+                            ):
+                                # We are excepting combo message that has
+                                # MSAP cancel, begin, sc update, end, update
+                                # Parse responses accordingly.
+                                resp: MsapPingResp = MsapPingResp(
+                                    msg.data_payload
+                                )
+                                if resp.is_valid():
+                                    if resp.getReference() == req_ref:
+                                        if (
+                                            msg.source_address
+                                            not in responded_nodes_ok
+                                        ):
+                                            responded_nodes_ok[
+                                                msg.source_address
+                                            ] = 1
+                                        else:
+                                            responded_nodes_ok[
+                                                msg.source_address
+                                            ] += 1
+
+                                        hopKey: int = msg.hop_count
+                                        if (
+                                            hopKey
+                                            not in network_hopcount_histo
+                                        ):
+                                            network_hopcount_histo[hopKey] = 1
+                                        else:
+                                            network_hopcount_histo[hopKey] += 1
+
+                                        print(
+                                            "T {} ms: Node #{} ping resp from "
+                                            "node address {}".format(
+                                                int(
+                                                    (
+                                                        perf_counter()
+                                                        - ping_start_time_value
+                                                    )
+                                                    * 1000
+                                                ),
+                                                len(responded_nodes_ok),
+                                                msg.source_address,
+                                            )
+                                        )
+
+                                        ret = True
+
+                            return ret
+
+                        # Poll results
+                        last_msg_received_time = perf_counter()
+
+                        while (
+                            perf_counter() - last_msg_received_time
+                            < silence_time_sec
+                        ):
+                            data_msgs = self.get_messages_from_data_queue()
+
+                            if data_msgs is not None:
+                                for data_msg in data_msgs:
+                                    if (
+                                        __sc_handle_msap_ping_message(
+                                            data_msg,
+                                            request_ref,
+                                            ping_start_time,
+                                        )
+                                        is True
+                                    ):
+                                        last_msg_received_time = perf_counter()
+                            else:
+                                default_sleep_time: float = 0.1
+                                sleep(default_sleep_time)
+
+                        # Calculate result
+                        difficulty_sum: int = 0
+                        print("")
+                        print(
+                            "Nodes distribution ----------------------------"
+                        )
+                        for key in network_hopcount_histo.keys():
+                            difficulty = int(key) * network_hopcount_histo[key]
+                            difficulty_sum += difficulty
+                            categoryValStr: str = "*" * network_hopcount_histo[
+                                key
+                            ]
+                            print(
+                                "| Hop count "
+                                + "{}".format(key).ljust(4)
+                                + ":"
+                                + " {}".format(categoryValStr)
+                            )
+
+                        print("| C: {}".format(difficulty_sum))
+                        print(
+                            "-----------------------------------------------"
+                        )
+                        print(
+                            "C = sum of each category ([node hop count] * "
+                            "amount of nodes in category[node hop count])"
+                        )
+                        print("Smaller C value should be 'easier network'.")
+
+                        # Print result to console
+                        print(
+                            "Ok response received from {} node(s).".format(
+                                len(responded_nodes_ok)
+                            )
+                        )
+
+                    else:
+                        print("Command FAIL [{}]".format(response_bcast.res))
+                else:
+                    print("Command FAIL due timeout.")
+
+        else:
+            print("Command FAIL due invalid gw or sink selection.")
+        print("")

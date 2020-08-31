@@ -25,7 +25,11 @@ import wirepas_messaging.wpe as messaging
 
 from .connectors import Service
 from .settings import WPESettings
-from ...tools import ParserHelper, LoggerHelper, JsonSerializer
+from wirepas_backend_client.tools import (
+    ParserHelper,
+    LoggerHelper,
+    JsonSerializer,
+)
 
 
 def main():

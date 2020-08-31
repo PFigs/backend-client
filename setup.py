@@ -105,11 +105,7 @@ setup(
         ),
         (
             "./wirepas_backend_client-extras/examples",
-            [
-                "examples/find_all_nodes.py",
-                "examples/influx_viewer.py",
-                "examples/mqtt_viewer.py",
-            ],
+            ["examples/find_all_nodes.py", "examples/mqtt_viewer.py"],
         ),
     ],
     entry_points={

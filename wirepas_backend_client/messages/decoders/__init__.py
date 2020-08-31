@@ -66,8 +66,6 @@ from .bootdiagnostics import BootDiagnosticsMessage
 from .neighbordiagnostics import NeighborDiagnosticsMessage
 from .trafficdiagnostics import TrafficDiagnosticsMessage
 from .nodediagnostics import NodeDiagnosticsMessage
-from .testnw import TestNWMessage
-
 
 __all__ = [
     "GenericMessage",
@@ -79,5 +77,4 @@ __all__ = [
     "NeighborDiagnosticsMessage",
     "TrafficDiagnosticsMessage",
     "NodeDiagnosticsMessage",
-    "TestNWMessage",
 ]
